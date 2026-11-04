@@ -23,12 +23,14 @@ test('only an answer the PC broke offers "Test this question again"', () => {
   assert.match(timedOut.text, /Ran out of time/);
   assert.match(timedOut.text, /graphics card/);
 
-  // Cut off at the token limit: explained, and no button, because at
-  // temperature 0 asking again gives the same answer.
+  // Cut off at the token limit: explained, and no button, because with a
+  // fixed seed asking again gives the same answer. Not "temperature 0": a run
+  // with each model's own settings is asked at the model's temperature.
   const cutOff = answerNote(answer({ doneReason: 'length', status: 'truncated', stableRuns: 0 }));
   assert.equal(cutOff.retestable, false);
   assert.match(cutOff.text, /token limit/);
-  assert.match(cutOff.text, /temperature 0/);
+  assert.match(cutOff.text, /fixed seed/);
+  assert.doesNotMatch(cutOff.text, /temperature 0/);
 });
 
 test('a test saved before 0.11.0 says why it cannot be asked again', () => {

@@ -7,10 +7,10 @@ const read = (path) => readFileSync(new URL(path, import.meta.url), 'utf-8').rep
 test('how we score does not claim there is no cloud judge, and says what marks open answers', () => {
   const section = read('../src/components/HowWeScoreSection.tsx');
   assert.doesNotMatch(section, /No cloud AI judge/);
-  assert.match(section, /marked by a judge model: one on this computer unless you turn on a cloud judge/);
+  assert.match(section, /marked by a judge model: two different ones on this computer when you have them, with\s+their marks averaged, unless you turn on a cloud judge/);
   const reference = read('../src/lib/scoreReference.ts');
   assert.doesNotMatch(reference, /No cloud AI judge/);
-  assert.match(reference, /Open-ended answers are marked by a judge model, a local one unless you chose a cloud judge/);
+  assert.match(reference, /Open-ended answers are marked by a judge model, a local one unless you chose a cloud judge\. Two different local judges mark each one when you have them, and their marks are averaged; a cloud judge marks once\./);
 });
 
 test('the chat greets without asking for a test that may already have run, and says it is private and free', () => {

@@ -209,7 +209,7 @@ npm run build      # production build
 
 ## Command-line fit check
 
-The Fit grade from the Models list, in a terminal: which models will run well on this computer, best first, with the command that gets each one. It grades the chat models in a snapshot of Ollama's library bundled with each release (this one from October 2026), reads your graphics card the way the app does, and asks a local Ollama, if one is running, which models you already have. Nothing is downloaded and nothing leaves your computer.
+The Fit grade from the Models list, in a terminal: which models will run well on this computer, best first, with the command that gets each one. It grades the chat models in a snapshot of Ollama's library bundled with each release (this one from November 2026), reads your graphics card the way the app does, and asks a local Ollama, if one is running, which models you already have. Nothing is downloaded and nothing leaves your computer.
 
 ```bash
 npx rigmatch-fit
@@ -253,7 +253,7 @@ Extreme   qwen3:30b-a3b  Not run: needs 24 GB of graphics memory, and this PC ha
 
 `--endurance <model>` does the same for the context. The speed test runs at a short context, so this fills 2K, 8K and 16K with a prompt that hides a passkey and says where that model slows down, moves part of itself to system memory, or loses the passkey, on your card. It takes the same care as `--measure`, and it is also in the app, under My PC › Speed score.
 
-A is the best pick for this computer and F will not fit. The grade weighs answer quality (by size and model family), estimated speed, and the room left in graphics memory. It is a different scale from the Match Score, which RigMatch measures by actually running the model. The bundled file runs on Node 20 or later on Windows, macOS and Linux; its only dependency is [systeminformation](https://www.npmjs.com/package/systeminformation).
+A is the best pick for this computer and F will not fit. The grade weighs answer quality (by size and model family, and less for a copy squeezed below 4 bits), estimated speed, and the room left in graphics memory. It is a different scale from the Match Score, which RigMatch measures by actually running the model. The bundled file runs on Node 20 or later on Windows, macOS and Linux; its only dependency is [systeminformation](https://www.npmjs.com/package/systeminformation).
 
 ## How the Match Score works
 
@@ -261,12 +261,12 @@ Each model runs the same question set on your hardware. The score blends four pa
 
 | Ingredient | Weight | What it measures |
 |---|---|---|
-| 🎯 Quality | 34% | Whether answers hold up: valid JSON, followed instructions, no invented facts. Fixed rules mark most answers. A judge model marks the open-ended ones: one of your local models, picked for you unless you choose, or an OpenRouter model if you turn that on. A quick check uses rules only |
-| ⚡ Speed | 32% | Average writing speed on your rig, in tokens a second: 5 scores 0, and 100 or more scores 100 |
+| 🎯 Quality | 34% | Whether answers hold up: valid JSON, followed instructions, no invented facts. Fixed rules mark most answers. Judge models mark the open-ended ones: two different local models, picked for you unless you choose, with their marks averaged, or an OpenRouter model if you turn that on. A quick check uses rules only |
+| ⚡ Speed | 32% | Average writing speed on your rig, in tokens a second: 5 scores 0, and 50 or more scores 100, since past that a reply arrives faster than you can read it |
 | 🔁 Reliability | 18% | The share of answers that finished cleanly: not empty, not failed, and not cut off at the token limit |
-| 🧩 Fit | 16% | How big the model is, read from the size in its name: 3B or under scores highest, and bigger models score less. It does not look at your graphics memory. The Fit grade on the Models list and in `rigmatch-fit` does |
+| 🧩 Fit | 16% | How comfortably the model sat in your memory during the test, as Ollama reported it: all of it on the graphics card with room to spare scores 100, a full card less, and a model that spills into system memory less again. LM Studio models are estimated from their download size |
 
-The result is a 0–100 Match Score and a letter grade, measured on your machine rather than a leaderboard's H100. Speed and reliability are measured on your PC, and Fit comes from the model's size. Quality is the softest of the four, which is why the app shows the breakdown rather than only the total. **Rank by** on the Winner screen and the fader on Results move the weight between accuracy and speed.
+The result is a 0–100 Match Score and a letter grade, measured on your machine rather than a leaderboard's H100. Speed, reliability and fit are measured on your PC. Quality is the softest of the four, which is why the app shows the breakdown rather than only the total. **Rank by** on the Winner screen and the fader on Results move the weight between accuracy and speed.
 
 ## Privacy
 

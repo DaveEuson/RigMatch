@@ -5,8 +5,9 @@ import { formatLocale } from './formatLocale.ts';
 /**
  * What to say under an answer that went wrong, and whether asking again helps.
  *
- * RigMatch asks at temperature 0 with a fixed seed, so an answer the model cut
- * off at the token limit comes back the same every time. Only an answer the PC
+ * RigMatch asks with a fixed seed, at temperature 0 or at the model's own
+ * settings (electron/modelSettings.cjs), so an answer the model cut off at the
+ * token limit comes back the same every time. Only an answer the PC
  * broke is worth asking again, and the main process decides for certain
  * (canRetest in electron/benchmarkRetest.cjs); this is what the panel shows.
  */
@@ -42,7 +43,7 @@ export function answerNote(prompt: BenchmarkPromptResult): AnswerNote | null {
   }
   if (/length/i.test(prompt.doneReason || '') && prompt.status !== 'ok') {
     return {
-      text: 'Cut off at the token limit. RigMatch asks at temperature 0, so the model writes the same answer every time, and asking again would not change it.',
+      text: 'Cut off at the token limit. RigMatch asks with a fixed seed, so the model writes the same answer every time, and asking again would not change it.',
       retestable: false,
     };
   }

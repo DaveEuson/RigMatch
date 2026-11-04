@@ -4,6 +4,19 @@ Every RigMatch release, newest first. These are the same notes the app shows in
 Update Center — this file and the GitHub release pages are generated from
 `src/data/releaseNotes.ts`, so there is only one place to write them.
 
+## 0.11.0 — Fairer Scores
+_Beta build_
+
+- The Match Score's Speed part is now full from 50 tokens a second, the speed at which a reply arrives faster than you can read it. A quick 8B is no longer marked down against a tiny model for speed you couldn't see. Fit now comes from your PC: how much of the model sat on your graphics card during the test, and how much room was left, instead of the size in its name. Scores from earlier versions say Retest recommended.
+- Answers with no right answer to check are now marked by two different judges on your computer, and the two marks are averaged. One judge's mark is one opinion, and judges disagree, especially on drawings. The answers say who marked each one, and when the two were 20 or more points apart, that the mark is rough. A cloud judge you picked is still asked once.
+- When a question goes wrong because of your PC rather than the model (a dropped connection, Ollama stopping mid-answer, a reply that never finishes), RigMatch asks it once more instead of ending that model's test, and says so beside the answer. A drawing that runs out of time has a "Test this question again" button in the answers, in a test's report and on its page in Results. It asks only that question and scores the test again. An answer cut off at the token limit says why asking again wouldn't help: RigMatch asks with a fixed seed, so the model writes the same answer every time.
+- You can now test each model with its own settings, the ones its makers recommend, under "How each model answers" when you start a test. RigMatch normally asks every model at temperature 0, the fairest comparison, but some models are made for other settings and repeat themselves until they are cut off. Answers still come back the same on every run, and the test says which settings it used. In Results, its score is marked "Own settings", because it isn't a like-for-like comparison with a test asked the usual way. LM Studio models always use the same settings.
+- The Winner card now says when another contestant answered 10 or more points more accurately than your Top Match, so a fast small model's grade isn't read as the smartest.
+- Context endurance, under My PC > Speed score in Advanced Mode, tests one installed model at 2K, 8K and 16K of context with a prompt that hides a passkey. It says where the model first slows down, moves part of itself to system memory, or loses the passkey, on your graphics card. Every other test runs at 2K, so a model that is quick there can crawl at 16K without anything saying so. In a terminal, rigmatch-fit --endurance with a model name does the same. It works with Ollama only and takes a few minutes.
+- The Fit grade on the Models list and in rigmatch-fit now counts a copy squeezed below 4 bits (Q3, Q2 and smaller) as a smaller model when it estimates answer quality, and its reasons say so. A test on your PC still replaces the estimate.
+- RigMatch's list of what each Ollama model can do is refreshed for 271 families, including LFM3 and MiMo v2.6. pplx-decider-flash is a decision model, so it stays out of chat picks like the other decision models.
+- RigMatch and rigmatch-fit now use systeminformation 5.33.16, which fixes three security problems in parts of it that RigMatch doesn't use (reading Windows services and network statistics).
+
 ## 0.10.1 — Every Test, Listed
 _Beta build_
 
