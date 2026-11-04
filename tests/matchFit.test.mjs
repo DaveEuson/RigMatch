@@ -48,6 +48,14 @@ test('a model partly in system memory scores 60 times its share on the card', ()
   assert.ok(fitFromPc({ model: 'm', footprint: footprint(0.98), graphicsBytes: 12 * GB }).fit < 70);
 });
 
+test('a model spread over two cards is not scored as one card overfilled', () => {
+  // Two 12 GB cards: RigMatch reads one, Ollama puts 20 GB across both.
+  const footprint = { sizeBytes: 20 * GB, vramBytes: 20 * GB, share: 1 };
+  assert.deepEqual(fitFromPc({ model: 'qwen3:32b', footprint, graphicsBytes: 12 * GB }), { fit: 100, basis: 'measured', gpuShare: 1 });
+  // One card, filled to the top, still scores as full.
+  assert.equal(fitFromPc({ model: 'm', footprint: { sizeBytes: 12 * GB, vramBytes: 12 * GB, share: 1 }, graphicsBytes: 12 * GB }).fit, 70);
+});
+
 test('with no usable card, Fit is judged against system memory instead of 0 for every model', () => {
   const ram = 16 * GB;
   const cpu = (sizeGb) => fitFromPc({ model: 'm', footprint: { sizeBytes: sizeGb * GB, vramBytes: 0, share: 0 }, graphicsBytes: 0.5 * GB, systemBytes: ram });

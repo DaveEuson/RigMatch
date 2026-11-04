@@ -91,3 +91,13 @@ test('only a failure on the PC\'s side is asked again on its own', () => {
   assert.equal(transientFailure(new Error('500 Internal Server Error from Ollama: model requires more system memory (12 GiB) than is available')), null);
   assert.equal(transientFailure(undefined), null);
 });
+
+test('asked a third time, the first try is still the run\'s own', () => {
+  const first = answer('draw', { type: 'drawing', status: 'no-response', doneReason: 'timeout', timedOut: true, diagnostic: 'the run' });
+  const previous = { model: 'm', completedAt: 'x', prompts: [first], scores: { fit: 100 } };
+  const again = answer('draw', { type: 'drawing', status: 'no-response', doneReason: 'timeout', timedOut: true, diagnostic: 'second' });
+  const twice = mergeRetest(previous, again, { at: '2026-11-03T20:00:00.000Z' });
+  const third = mergeRetest(twice, answer('draw', { type: 'drawing' }), { at: '2026-11-03T21:00:00.000Z' });
+  assert.equal(third.prompts[0].retest.firstTry.diagnostic, 'the run');
+  assert.equal(third.prompts[0].retest.at, '2026-11-03T21:00:00.000Z');
+});
