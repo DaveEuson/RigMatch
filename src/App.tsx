@@ -198,6 +198,7 @@ import {
   THEME_STORAGE_KEY,
   TUTORIAL_STORAGE_KEY,
   UI_MODE_STORAGE_KEY,
+  SAMPLING_STORAGE_KEY,
   navItems,
   readCloseCleanupAsk,
   writeCloseCleanupAsk,
@@ -650,6 +651,16 @@ function App() {
   const [isCloseCleanupDeleting, setIsCloseCleanupDeleting] = useState(false);
   const [closeCleanupMessage, setCloseCleanupMessage] = useState<string | null>(null);
   const [benchmarkQuestionCount, setBenchmarkQuestionCount] = useState<BenchmarkQuestionCount>(10);
+  // How each model answers in a test (electron/modelSettings.cjs): RigMatch's
+  // fixed settings, the same for every model, or each model's own. Kept, as a
+  // choice the person made once.
+  const [sampling, setSampling] = useState<'fixed' | 'model'>(() => {
+    try { return localStorage.getItem(SAMPLING_STORAGE_KEY) === 'model' ? 'model' : 'fixed'; } catch { return 'fixed'; }
+  });
+  const chooseSampling = useCallback((next: 'fixed' | 'model') => {
+    setSampling(next);
+    writeLocal(SAMPLING_STORAGE_KEY, next);
+  }, []);
   // Answer-grading mode: 'heuristic' (built-in, fast, offline) or 'judge' (grade
   // answers with a local model). Off by default so existing scores don't move.
   // How many improve passes each model has had this session (App Builder retries).
@@ -2507,6 +2518,7 @@ function App() {
         ...(judge ? { judgeModel: judge.model, judgeProvider: judge.provider, judgeApiKey: judge.apiKey } : {}),
         autoJudgeModels,
         judgeEndpoints,
+        sampling,
       }), modelToTest);
       setBenchmark(result);
       setBenchmarkByModel((current) => upsertBenchmarkResults(current, [result]));
@@ -2603,7 +2615,7 @@ function App() {
       activeBenchmarkProgressIdRef.current = null;
       setIsBenchmarking(false);
     }
-  }, [benchmarkPromptPlan, benchmarkQuestionCount, currentSuiteName, loadLogs, modelRows, ollama, recordRuns, saveTestReport, refreshProviderStatus, selectedHost, selectedModel, system.hostname, skillJudgeFor, rigStampForModel, tellUser, autoJudgeModels, judgeEndpoints]);
+  }, [benchmarkPromptPlan, benchmarkQuestionCount, currentSuiteName, loadLogs, modelRows, ollama, recordRuns, saveTestReport, refreshProviderStatus, selectedHost, selectedModel, system.hostname, skillJudgeFor, rigStampForModel, tellUser, autoJudgeModels, judgeEndpoints, sampling]);
 
   /**
    * "Test this question again": one answer the PC broke, asked again with this
@@ -3660,6 +3672,7 @@ function App() {
           ...(judge ? { judgeModel: judge.model, judgeProvider: judge.provider, judgeApiKey: judge.apiKey } : {}),
           autoJudgeModels,
           judgeEndpoints,
+          sampling,
           }), row.displayName);
         } catch (error) {
           const raw = getErrorMessage(error);
@@ -3865,7 +3878,7 @@ function App() {
       activeBenchmarkProgressIdRef.current = null;
       setIsListTesting(false);
     }
-  }, [benchmarkPromptPlan, benchmarkQuestionCount, currentSuiteName, loadLogs, ollama, recordRuns, saveTestReport, refreshProviderStatus, selectNav, selectedHost, shortlistedRows, system.hostname, system.platform, uiMode, skillJudgeFor, rigStampForModel, tellUser, autoJudgeModels, judgeEndpoints, blindOn, beginBlindShow, finishBlindShow, endBlindShow]);
+  }, [benchmarkPromptPlan, benchmarkQuestionCount, currentSuiteName, loadLogs, ollama, recordRuns, saveTestReport, refreshProviderStatus, selectNav, selectedHost, shortlistedRows, system.hostname, system.platform, uiMode, skillJudgeFor, rigStampForModel, tellUser, autoJudgeModels, judgeEndpoints, blindOn, beginBlindShow, finishBlindShow, endBlindShow, sampling]);
 
   /**
    * A skill run that throws must not leave the mini bar spinning forever.
@@ -5953,6 +5966,8 @@ function App() {
           gpuContention={pendingGpuContention}
           onDownloadMissing={() => requestThirdPartyModelDownloads(shortlistedRows)}
           onChangeQuestionCount={setBenchmarkQuestionCount}
+          sampling={sampling}
+          onChangeSampling={chooseSampling}
           onChangeQuestions={setBenchmarkQuestions}
           // A test: the first judge that is not the model. A show: the first,
           // who marks every contestant but itself. It was worked out against

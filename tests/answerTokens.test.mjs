@@ -2,6 +2,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
+
+const { answerOptions } = createRequire(import.meta.url)('../electron/modelSettings.cjs');
 
 /**
  * A scripted run can let answers run past the show's 300 tokens, and every
@@ -16,12 +19,18 @@ const lift = (start, end) => main.slice(main.indexOf(start), main.indexOf(end, m
 test('the show keeps 300 tokens; a scripted run can ask for more, and the context grows with it', () => {
   const defaults = lift('const BENCHMARK_GENERATE_OPTIONS', '});') + '});';
   const helper = lift('function benchmarkGenerateOptions()', '\n}\n') + '\n}\n';
-  const make = (activeBenchmark) => new Function('activeBenchmark', `${defaults}\n${helper}\nreturn benchmarkGenerateOptions();`)(activeBenchmark);
+  const make = (activeBenchmark) => new Function('activeBenchmark', 'answerOptions', `${defaults}\n${helper}\nreturn benchmarkGenerateOptions();`)(activeBenchmark, answerOptions);
   assert.equal(make(null).num_predict, 300);
   assert.equal(make({ answerTokens: null }).num_ctx, 2048);
   const long = make({ answerTokens: 1000 });
   assert.equal(long.num_predict, 1000);
   assert.ok(long.num_ctx >= 1000 + 1024, 'question and whole answer fit');
+  // Each model's own settings leave temperature to the model and keep the rest, the allowance included.
+  const own = make({ answerTokens: 1000, sampling: 'model' });
+  assert.equal(own.temperature, undefined);
+  assert.equal(own.num_predict, 1000);
+  assert.equal(own.seed, 1);
+  assert.equal(make(null).temperature, 0, 'the fixed settings keep temperature 0');
   // Clamped where the run starts.
   assert.match(main, /answerTokens: Number\.isInteger\(request\.answerTokens\) \? Math\.max\(64, Math\.min\(2000, request\.answerTokens\)\) : null,/);
   // Every question path reads the run's allowance, not the constant.

@@ -1,5 +1,5 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
-import type { BenchmarkPromptResult } from '../types';
+import type { BenchmarkPromptResult, BenchmarkResult } from '../types';
 import { formatLocale } from './formatLocale.ts';
 
 /**
@@ -59,4 +59,16 @@ export function judgeNote(prompt: BenchmarkPromptResult): string | null {
   return spread >= JUDGE_SPREAD_FLAG
     ? `${marked} They are ${spread} points apart, so read this mark as rough.`
     : marked;
+}
+
+/**
+ * How a run was asked, when it was not RigMatch's fixed settings: each model's
+ * own (electron/modelSettings.cjs), with the values it set.
+ */
+export function samplingLine(result: Pick<BenchmarkResult, 'sampling' | 'modelSettings'>): string | null {
+  if (result.sampling !== 'model') return null;
+  const values = Object.entries(result.modelSettings ?? {}).map(([name, value]) => `${name} ${value}`);
+  return values.length > 0
+    ? `Asked with its own settings: ${values.join(', ')}.`
+    : "Asked with its own settings. It sets none, so Ollama's defaults applied.";
 }

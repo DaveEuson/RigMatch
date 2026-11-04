@@ -281,6 +281,13 @@ export type BenchmarkResult = {
   fitBasis?: 'measured' | 'estimated' | 'name';
   /** Share of the loaded model on the graphics card (0 to 1), when Ollama reported it. */
   gpuShare?: number;
+  /**
+   * 'model': asked with each model's own settings (electron/modelSettings.cjs),
+   * with the sampling values it set in modelSettings ({} for Ollama's
+   * defaults). Absent: RigMatch's fixed settings, temperature 0.
+   */
+  sampling?: 'model';
+  modelSettings?: Record<string, number> | null;
 };
 
 /** What a score was measured on, stamped at scoring time. */
@@ -725,6 +732,8 @@ export type AgentArcadeApi = {
     /** Where each local judge model runs, so one in LM Studio can mark an Ollama contestant and the reverse. */
     /** weights: every identity of the model (modelIdentities), so a copy under another name is still itself. */
     judgeEndpoints?: Record<string, { provider: LocalModelProvider; baseUrl?: string; weights?: string[] }>;
+    /** 'model': ask with each model's own settings instead of temperature 0 (Ollama only). */
+    sampling?: 'fixed' | 'model';
   }) => Promise<BenchmarkResult>;
   /**
    * Ask one answer the PC broke again, with the run's settings, and get the run

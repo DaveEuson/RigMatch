@@ -59,6 +59,8 @@ export function RunSheet({
   onDownloadMissing,
   onChangeQuestionCount,
   onChangeQuestions,
+  sampling = 'fixed',
+  onChangeSampling,
   autoJudgeModel,
   judgeCandidates = [],
   sameAsContestant,
@@ -111,6 +113,9 @@ export function RunSheet({
   onDownloadMissing?: () => void;
   onChangeQuestionCount: (count: BenchmarkQuestionCount) => void;
   onChangeQuestions: (questions: BenchmarkQuestion[]) => void;
+  /** How each model answers: RigMatch's fixed settings, or its own (electron/modelSettings.cjs). */
+  sampling?: 'fixed' | 'model';
+  onChangeSampling?: (sampling: 'fixed' | 'model') => void;
   /** A local model that marks the prose questions when judging is off. */
   autoJudgeModel?: string;
   /** The local judges in the order the run tries them, for naming the second one. */
@@ -533,6 +538,20 @@ export function RunSheet({
                     {benchmarkQuestions.length < questionCount && (
                       <p className="run-sheet-note">The set has {benchmarkQuestions.length} questions, so it repeats to reach {questionCount}.</p>
                     )}
+                  </Section>
+                )}
+
+                {asksQuestions && onChangeSampling && (
+                  <Section title="How each model answers" muted={isQuick || skillsOnly}>
+                    <div className="chip-row" role="group" aria-label="How each model answers">
+                      <button type="button" className="chip" aria-pressed={sampling === 'fixed'} onClick={() => onChangeSampling('fixed')}>The same settings for every model</button>
+                      <button type="button" className="chip" aria-pressed={sampling === 'model'} onClick={() => onChangeSampling('model')}>Each model's own settings</button>
+                    </div>
+                    <p className="run-sheet-note">
+                      {sampling === 'model'
+                        ? "Each model answers with the settings its makers recommend, as you would use it. A model that repeats itself at temperature 0 often doesn't here. Answers still come back the same on every run, but scores are not comparable with tests at the same settings. LM Studio models always use the same settings."
+                        : 'Every model answers at temperature 0, the fairest comparison: the same conditions for each, and the same answer every run. Some models are made for other settings and can repeat themselves until they are cut off.'}
+                    </p>
                   </Section>
                 )}
 
