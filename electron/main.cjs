@@ -39,6 +39,7 @@ const { fitFromPc, loadedFootprint } = require('./matchFit.cjs');
 const { gradeFor, totalsFromPrompts } = require('./benchmarkTotals.cjs');
 const { transientFailure, canRetest, mergeRetest } = require('./benchmarkRetest.cjs');
 const { secondJudge, combineMarks } = require('./judgePanel.cjs');
+const { samplingFromParameters, answerOptions } = require('./modelSettings.cjs');
 const security = require('./security.cjs');
 const { chatMessageText, chatHistory } = require('./chatDock.cjs');
 const gpuContention = require('./gpuContention.cjs');
@@ -208,11 +209,15 @@ const BENCHMARK_GENERATE_OPTIONS = Object.freeze({
  * stock model's ten "harmless but edgy" answers were cut off, and a judge
  * marked them incomplete. The context grows with it, so the question and the
  * whole answer still fit. The app never sets it.
+ *
+ * With "each model's own settings" (modelSettings.cjs) temperature is left to
+ * the model; the seed, the context and the allowance stay the same.
  */
 function benchmarkGenerateOptions() {
   const tokens = activeBenchmark?.answerTokens;
-  if (!tokens) return BENCHMARK_GENERATE_OPTIONS;
-  return { ...BENCHMARK_GENERATE_OPTIONS, num_predict: tokens, num_ctx: Math.max(BENCHMARK_GENERATE_OPTIONS.num_ctx, tokens + 1024) };
+  const fixed = !tokens ? BENCHMARK_GENERATE_OPTIONS
+    : { ...BENCHMARK_GENERATE_OPTIONS, num_predict: tokens, num_ctx: Math.max(BENCHMARK_GENERATE_OPTIONS.num_ctx, tokens + 1024) };
+  return answerOptions(fixed, activeBenchmark?.sampling);
 }
 const BENCHMARK_WARMUP_OPTIONS = Object.freeze({
   temperature: 0,
@@ -3656,6 +3661,8 @@ async function retestBenchmarkPrompt(request = {}, sender) {
     baseUrl: previous.baseUrl,
     progressId: typeof request.progressId === 'string' ? request.progressId : undefined,
     retestPrompt: { id: firstTry.id, label: firstTry.label, type: firstTry.type, prompt: firstTry.prompt },
+    // Asked the way the rest of the run was.
+    sampling: previous.sampling === 'model' ? 'model' : 'fixed',
   }, sender);
   const answer = single.prompts.find((prompt) => prompt.id === promptId) ?? single.prompts[0];
   return mergeRetest(previous, answer);
@@ -3681,6 +3688,11 @@ async function runBenchmarkInner(request = {}, sender, signal) {
     ? normalizeBenchmarkQuestions([request.retestPrompt]).map((prompt) => ({ ...prompt, id: String(request.retestPrompt.id) }))
     : buildBenchmarkPromptPlan(questionCount, request.questions);
   const progressId = typeof request.progressId === 'string' ? request.progressId : null;
+  // How each answer is asked (modelSettings.cjs): the same fixed settings for
+  // every model, or each model's own. LM Studio's chat sets its own
+  // temperature of 0 (lmStudio.cjs), so there it is always the fixed settings.
+  const sampling = request.sampling === 'model' && provider !== 'lm-studio' ? 'model' : 'fixed';
+  if (activeBenchmark) activeBenchmark.sampling = sampling;
 
   // LLM-as-judge quality scoring (opt-in). Local judging runs through the same
   // Ollama /api/generate as the contestants; cloud judging (strictly opt-in —
@@ -3814,6 +3826,7 @@ async function runBenchmarkInner(request = {}, sender, signal) {
       benchmarkMode: provider === 'lm-studio' ? 'lm-studio' : 'ollama-parity',
       provider,
       qualityScoring: useJudge ? 'judge' : autoJudgeUnmarkable ? 'heuristic + judge for unmarkable' : 'heuristic',
+      sampling,
       judgeModel: useJudge ? judgeModel : autoJudgeUnmarkable ? autoJudgeModel : null,
       judgeProvider: useJudge ? judgeProvider : autoJudgeUnmarkable ? 'local' : null,
       thinkingDisabled: BENCHMARK_THINK_DISABLED,
@@ -3858,6 +3871,11 @@ async function runBenchmarkInner(request = {}, sender, signal) {
   const footprint = provider === 'lm-studio'
     ? null
     : loadedFootprint(await fetchJson(`${baseUrl}/api/ps`, { signal }, 3000).catch(() => null), model);
+  // With its own settings, which values the model answered with, so the
+  // result can say: {} means it sets none and Ollama's defaults applied.
+  const modelSettings = sampling !== 'model' ? null : samplingFromParameters(
+    (await fetchJson(`${baseUrl}/api/show`, { method: 'POST', signal, body: JSON.stringify({ name: model }) }, 4000).catch(() => null))?.parameters,
+  );
 
   sendProgress({
     phase: 'started',
@@ -4312,6 +4330,8 @@ async function runBenchmarkInner(request = {}, sender, signal) {
     // from its size, or (nothing known) the size in its name.
     fitBasis,
     ...(typeof gpuShare === 'number' ? { gpuShare: Math.round(gpuShare * 100) / 100 } : {}),
+    // Asked with the model's own settings rather than RigMatch's fixed ones.
+    ...(sampling === 'model' ? { sampling, modelSettings } : {}),
   };
   if (avgFirstToken !== null) {
     result.avgFirstTokenMs = Math.round(avgFirstToken);

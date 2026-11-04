@@ -3,7 +3,7 @@ import type { BenchmarkQuestion } from '../benchmarkSuite';
 import { formatMs, getScoreTone } from '../lib/format';
 import { getBenchmarkForModel, getShortModelName } from '../lib/modelCatalog';
 import { getPromptDiagnosticText } from '../lib/promptDiagnostic';
-import { answerNote, judgeNote } from '../lib/answerRetest';
+import { answerNote, judgeNote, samplingLine } from '../lib/answerRetest';
 import { useAnswerRetest, type AnswerRetest } from '../lib/answerRetestContext';
 import type { BenchmarkPromptResult, BenchmarkResult, ModelRow, RunProgress, TranscriptViewMode } from '../types';
 import { PromptStatusPill } from './ScoreVisuals';
@@ -82,6 +82,7 @@ export function SpeedDateTranscriptPanel({
           {viewMode === 'by-model' && (
             <em>{benchmark ? `${benchmark.prompts.length} answers saved for ${activeRow?.displayName}.` : isLiveModel ? 'This contestant is answering now.' : 'This contestant has not been tested yet.'}</em>
           )}
+          {viewMode === 'by-model' && benchmark && samplingLine(benchmark) && <em>{samplingLine(benchmark)}</em>}
           {viewMode === 'by-question' && (
             <em>{hasAnyResults ? `${answeredRows.length} of ${rows.length} contestants tested — pick a question to compare.` : 'Run Speed Dating to see answers side by side.'}</em>
           )}
@@ -273,6 +274,7 @@ export function SpeedDateTranscriptPanel({
                             <span title="Answer quality score">{prompt.sobrietyScore} quality</span>
                             <span title="Generation speed">{prompt.tokensPerSecond} tok/s</span>
                             <span title="Time to complete">{formatMs(prompt.elapsedMs)}</span>
+                            {result.sampling === 'model' && <span title={samplingLine(result) ?? undefined}>own settings</span>}
                             <PromptStatusPill status={prompt.status} />
                           </div>
                         )}
