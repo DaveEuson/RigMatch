@@ -89,3 +89,11 @@ test('the footprint is read from Ollama\'s /api/ps listing, for this model only'
   assert.equal(loadedFootprint(null, 'x'), null);
   assert.equal(loadedFootprint({ models: [{ name: 'x:1b', size: 100 }] }, 'x:1b').share, 0, 'no size_vram: nothing on the card');
 });
+
+test('a model spread over two cards is not scored as one card overfilled', () => {
+  // Two 12 GB cards: RigMatch reads one, Ollama puts 20 GB across both.
+  const footprint = { sizeBytes: 20 * GB, vramBytes: 20 * GB, share: 1 };
+  assert.deepEqual(fitFromPc({ model: 'qwen3:32b', footprint, graphicsBytes: 12 * GB }), { fit: 100, basis: 'measured', gpuShare: 1 });
+  // One card, filled to the top, still scores as full.
+  assert.equal(fitFromPc({ model: 'm', footprint: { sizeBytes: 12 * GB, vramBytes: 12 * GB, share: 1 }, graphicsBytes: 12 * GB }).fit, 70);
+});

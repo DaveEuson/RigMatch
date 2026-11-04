@@ -403,3 +403,23 @@ test('toRunHistoryEntry only stamps contention when there is one', () => {
   assert.equal('gpuContention' in toRunHistoryEntry(base, {}), false);
   assert.equal(toRunHistoryEntry(base, { gpuContention: 'heavy' }).gpuContention, 'heavy');
 });
+
+test('a retested run takes its new score in place, keeping when and where it ran', async () => {
+  const { replaceRunScores } = await import('../src/lib/runHistory.ts');
+  const run = (completedAt, total) => ({
+    model: 'qwen3:8b', completedAt, total, grade: 'B', speed: 90, sobriety: 70, stability: 100, fit: 100,
+    questionCount: 10, elapsedMs: 1000, hardware: { gpu: 'RTX 4070', vramGb: 12, ramGb: 64 }, gpuContention: 'busy',
+  });
+  const history = appendRuns(emptyRunHistory(), [run('2026-11-01T10:00:00.000Z', 80), run('2026-11-03T10:00:00.000Z', 78)]);
+  const retested = {
+    model: 'qwen3:8b', completedAt: '2026-11-03T10:00:00.000Z', avgTokensPerSecond: 61,
+    scores: { total: 86, grade: 'A', speed: 90, sobriety: 85, stability: 100, fit: 100 },
+  };
+  const next = replaceRunScores(history, retested, 86.4);
+  const runs = getModelRuns(next, 'qwen3:8b');
+  assert.equal(runs.length, 2, 'replaced, not appended');
+  assert.deepEqual([runs[1].total, runs[1].preciseTotal, runs[1].sobriety, runs[1].avgTokensPerSecond], [86, 86.4, 85, 61]);
+  assert.deepEqual([runs[1].hardware, runs[1].gpuContention], [run('', 0).hardware, 'busy'], 'where it ran stays');
+  assert.equal(runs[0].total, 80, 'the earlier run is untouched');
+  assert.equal(replaceRunScores(history, { ...retested, completedAt: '2026-10-01T00:00:00.000Z' }), history, 'a run the timeline lacks changes nothing');
+});

@@ -186,6 +186,25 @@ export function appendRuns(history: RunHistory, entries: RunHistoryEntry[]): Run
 }
 
 /**
+ * One run's scores replaced after "Test this question again". The run is found
+ * by model and finish time, and keeps when, where and on what card it ran.
+ * appendRuns skips a run it already has, so without this the timeline (trend
+ * and deltas) kept the score from before the retest. Unchanged when the
+ * timeline does not have that run.
+ */
+export function replaceRunScores(history: RunHistory, result: BenchmarkResult, preciseTotal?: number): RunHistory {
+  const key = normalizeModelKey(result.model);
+  const runs = history.runs[key];
+  const index = runs?.findIndex((run) => run.completedAt === result.completedAt) ?? -1;
+  if (!runs || index < 0) return history;
+  const { total, grade, speed, sobriety, stability, fit } = result.scores;
+  const updated: RunHistoryEntry = {
+    ...runs[index], total, preciseTotal, grade, speed, sobriety, stability, fit, avgTokensPerSecond: result.avgTokensPerSecond,
+  };
+  return { ...history, runs: { ...history.runs, [key]: runs.map((run, at) => (at === index ? updated : run)) } };
+}
+
+/**
  * Enforce the global cap by dropping the oldest runs across all models. A model
  * always keeps its most recent run, so nothing disappears from the table just
  * because another model was tested a lot.

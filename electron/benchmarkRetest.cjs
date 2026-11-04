@@ -58,7 +58,8 @@ function mergeRetest(previous, retestedPrompt, { at = new Date().toISOString() }
     ...retestedPrompt,
     retest: {
       at,
-      firstTry: {
+      // Asked a third time, the first try is still the run's own, not the last retest.
+      firstTry: firstTry.retest?.firstTry ?? {
         status: firstTry.status,
         doneReason: firstTry.doneReason,
         diagnostic: firstTry.diagnostic,
