@@ -142,7 +142,7 @@ A is the best pick for this computer, F will not fit, and "?" means the model's 
 
 - whether the model fits in graphics memory, and how much room it leaves for a long chat
 - how fast it should run, estimated from its size and your card (a mixture-of-experts model counts only the part it runs per word)
-- answer quality, judged by size and model family: older families count as smaller than they are, and so does a copy squeezed below 4 bits a weight (Q3, Q2, Q1), read from Ollama's label for an installed model or from a tag like `-q2_K`
+- answer quality, judged by size and model family: older families count as smaller than they are, and so does a copy squeezed below 4 bits a weight (Q3, Q2, Q1), read from Ollama's label for an installed model, from a tag like `-q2_K`, or, when neither says, from the download's size per weight (under 3.9 bits a weight, as Bonsai 2's are; every 4-bit download in Ollama's listing comes to 4.27 or more)
 
 The speeds are estimates; `--measure` measures them. The [RigMatch app](https://github.com/DaveEuson/RigMatch) also measures answer quality, with a judge model scoring the answers.
 
