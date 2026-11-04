@@ -159,8 +159,12 @@ export function toTestedModelScore(
     tokensPerSecond: result.avgTokensPerSecond,
     taskScores: summarizeTaskScores(result.prompts),
     rig,
+    ...(result.sampling === 'model' ? { sampling: 'model' as const } : {}),
   };
 }
+
+/** What the "Own settings" label beside a saved score means. */
+export const OWN_SETTINGS_NOTE = 'Asked with this model\'s own settings, not RigMatch\'s temperature 0, so it is not a like-for-like comparison with scores asked the usual way.';
 
 /** Merge new benchmark results into an existing model-score map (last write wins per model). */
 export function upsertModelScores(
