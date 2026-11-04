@@ -169,18 +169,49 @@ function paramsBillions(row: Pick<GradeRow, 'params' | 'sizeGb'>): number | null
 const LOW_BIT_SIZE_SHARE: Record<number, number> = { 1: 0.45, 2: 0.65, 3: 0.8 };
 
 /**
- * 1, 2 or 3 when the copy is squeezed below 4 bits, else null. Read from the
+ * Under this many bits a weight, going by the download's size, a copy whose
+ * label and tag say nothing counts as squeezed below 4 bits. In Ollama's own
+ * listing (2026-11), every plain 4-bit download comes to 4.27 or more, since
+ * the embeddings and image parts are kept at higher precision. Its q3_K
+ * copies come to 3.3–4.1, its q2_K copies to 3.2–3.5, and Bonsai 2's ternary
+ * downloads to 2.5–3.6. The line sits well below the 4-bit ones, so a 4-bit
+ * download is never marked down, at the cost of missing some q3_K_M copies.
+ */
+const SQUEEZED_BELOW_BITS_A_WEIGHT = 3.9;
+/**
+ * Sizes are held in GiB to one decimal, so under 1 GiB the rounding alone can
+ * move the bits a weight by 10%: too rough to judge a copy by.
+ */
+const SMALLEST_SIZE_TO_JUDGE_GB = 1;
+
+type Squeeze = { bits: number; from: 'name' | 'size' };
+
+/**
+ * 1, 2 or 3 bits when the copy is squeezed below 4, else null. Read from the
  * installed copy's label ("Q2_K", "IQ2_XXS", "TQ1_0", "3bit") or a tag that
  * names one ("8b-instruct-q2_K"). The label wins, since a tag can be renamed.
+ * When neither names any bits, the download's size per weight decides,
+ * rounded to the nearest bit. A file carries more than its weights, so that
+ * comes out at or above what the label will say once it is installed (Bonsai
+ * 2's are Q2_0): a download is never marked down harder than its copy will be.
  */
-function squeezedBits(row: Pick<GradeRow, 'name' | 'quantization'> & { displayName?: string }): number | null {
+function squeezedBits(row: Pick<GradeRow, 'name' | 'quantization' | 'params' | 'sizeGb'> & { displayName?: string }): Squeeze | null {
   const label = String(row.quantization ?? '').trim();
   const tag = fullName(row).toLowerCase().split(':')[1] ?? '';
   const match = label
     ? label.match(/^[it]?q(\d)(?:_|$)/i) ?? label.match(/^(\d)[-_ ]?bits?$/i)
     : tag.match(/(?:^|[-_])[it]?q(\d)(?:_|-|$)/);
-  const bits = match ? Number.parseInt(match[1], 10) : null;
-  return bits && LOW_BIT_SIZE_SHARE[bits] ? bits : null;
+  if (match) {
+    const bits = Number.parseInt(match[1], 10);
+    return LOW_BIT_SIZE_SHARE[bits] ? { bits, from: 'name' } : null;
+  }
+  // A label that names no bits ("F16", "MXFP4") is still the copy's own word on it.
+  if (label) return null;
+  const params = getParamSortValue(row.params ?? '');
+  if (!(params > 0) || !row.sizeGb || row.sizeGb < SMALLEST_SIZE_TO_JUDGE_GB) return null;
+  const perWeight = (row.sizeGb * 1024 ** 3 * 8) / (params * 1e9);
+  if (perWeight >= SQUEEZED_BELOW_BITS_A_WEIGHT) return null;
+  return { bits: Math.min(3, Math.max(1, Math.round(perWeight))), from: 'size' };
 }
 
 /**
@@ -357,7 +388,8 @@ function speedPoints(tokensPerSecond: number): number {
  * otherwise a curve on size (1B 40, 4B 70, 8B 85, 14B and up near 100), with
  * a mixture-of-experts model counted at the geometric mean of its total and
  * active size, a copy squeezed below 4 bits as a smaller model
- * (LOW_BIT_SIZE_SHARE), and an older family counted 20 points lower.
+ * (LOW_BIT_SIZE_SHARE, read from its label, its tag or its download's size),
+ * and an older family counted 20 points lower.
  *
  * Each thing the model can do beyond text (call tools, think before
  * answering, read images, hear) adds 5. Nothing else in the catalog says how
@@ -370,14 +402,15 @@ function qualityPoints(row: GradeRow, evidence: GradeEvidence): { points: number
   }
   const totalB = paramsBillions(row) ?? 1;
   // A size guessed from the download already assumes 4 bits, so only a labelled size is discounted.
-  const bits = getParamSortValue(row.params ?? '') > 0 ? squeezedBits(row) : null;
-  const effectiveB = Math.sqrt(totalB * totalB * shareOf(row)) * (bits ? LOW_BIT_SIZE_SHARE[bits] : 1);
+  const squeeze = getParamSortValue(row.params ?? '') > 0 ? squeezedBits(row) : null;
+  const effectiveB = Math.sqrt(totalB * totalB * shareOf(row)) * (squeeze ? LOW_BIT_SIZE_SHARE[squeeze.bits] : 1);
   const older = OLDER_FAMILIES.has(familyOf(fullName(row)));
   const abilities = (getModelCapabilities(row) ?? []).filter((ability) => ABILITIES.includes(ability)).length;
   const points = clamp(40 + 15 * Math.log2(Math.max(effectiveB, 0.05)) - (older ? 20 : 0) + abilities * 5);
   const reason = older
     ? 'an older model: newer ones this size answer better'
-    : bits ? `squeezed to ${bits} bit${bits === 1 ? '' : 's'}, which costs answer quality`
+    : squeeze?.from === 'size' ? `squeezed to about ${squeeze.bits} bit${squeeze.bits === 1 ? '' : 's'}, going by its size, which costs answer quality`
+    : squeeze ? `squeezed to ${squeeze.bits} bit${squeeze.bits === 1 ? '' : 's'}, which costs answer quality`
     : effectiveB < 2 ? 'tiny, so expect simple answers'
       : effectiveB < 7 ? 'small but capable'
         : effectiveB < 20 ? 'strong for its size'

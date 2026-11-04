@@ -1,10 +1,12 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 
 const { activeShare, describeSpeed, footprintFit, gradeModel, gradeRow, measuredBandwidth, mixtureSpillFit, pullCommand, rigBandwidth } = await import('../src/lib/modelGrade.ts');
 const { describeFitPlainly, getHardwareFit } = await import('../src/lib/modelCatalog.ts');
 const { MATCH_GRADE_BANDS } = await import('../src/lib/scoring.ts');
+const { catalogRows } = await import('../cli/fitCheck.ts');
 
 /**
  * The Fit grade folds fit, speed, answer quality and room to chat into one
@@ -397,6 +399,52 @@ test('Bonsai\'s 2-bit 9B still grades above gemma3:4b, as its test on this card 
   const gemma = gradeModel(row('gemma3:4b', '3.9B', 3.12, { quantization: 'Q4_K_M', capabilities: ['completion', 'vision'] }), rtx4070);
   assert.ok(bonsai.points > gemma.points, `${bonsai.points} vs ${gemma.points}`);
   assert.match(bonsai.summary, /squeezed to 2 bits/);
+});
+
+test('a download whose size works out under 4 bits a weight is graded as squeezed when nothing names its bits', () => {
+  // Sizes are GiB. Bonsai 2's 27B in rigmatch-fit's list: 7.7 GiB for 27 billion weights, about 2.5 bits each.
+  const big = gradeModel(row('newfamily:27b', '27B', 7.7), rtx4070);
+  assert.match(big.summary, /squeezed to about 2 bits, going by its size, which costs answer quality$/);
+  assert.equal(big.points, gradeModel(row('newfamily:27b', '27B', 7.7, { quantization: 'Q2_0' }), rtx4070).points, 'as its installed copy, labelled Q2_0, will');
+  // Its 9B, 3.0 GiB, about 2.9 bits each: nearer 3, so it is marked down less than its label will.
+  const nine = gradeModel(row('newfamily:9b', '9B', 3), rtx4070);
+  assert.match(nine.summary, /squeezed to about 3 bits, going by its size/);
+  assert.ok(nine.points > gradeModel(row('newfamily:9b', '9B', 3, { quantization: 'Q2_0' }), rtx4070).points);
+  assert.ok(nine.points < gradeModel(row('newfamily:9b', '9B', 3, { quantization: 'Q4_K_M' }), rtx4070).points);
+  assert.match(gradeModel(row('newfamily:8b', '8B', 1.1), rtx4070).summary, /squeezed to about 1 bit, going by its size/);
+  // An 8B at 4.9 GiB is 5.3 bits a weight: the usual 4-bit download.
+  assert.doesNotMatch(gradeModel(row('newfamily:8b', '8B', 4.9), rtx4070).summary, /squeezed/);
+  // What the copy says about itself wins over its size: a label, even one with no bit count, or a tag.
+  for (const quantization of ['Q4_K_M', 'F16', 'MXFP4']) {
+    assert.doesNotMatch(gradeModel(row('newfamily:8b', '8B', 2.6, { quantization }), rtx4070).summary, /squeezed/, quantization);
+  }
+  assert.doesNotMatch(gradeModel(row('newfamily:8b-instruct-q4_K_M', '8B', 2.6), rtx4070).summary, /squeezed/);
+  assert.match(gradeModel(row('newfamily:8b-instruct-q3_K_M', '8B', 2.6), rtx4070).summary, /squeezed to 3 bits, which/, 'the tag says 3, so not "about"');
+  // Under 1 GiB the rounding to a tenth is too rough to judge by, and a size guessed from the download has no weight count.
+  assert.doesNotMatch(gradeModel(row('newfamily:2b', '2B', 0.8), rtx4070).summary, /squeezed/);
+  assert.doesNotMatch(gradeModel(row('custom:latest', '', 1.1), rtx4070).summary, /squeezed/);
+});
+
+test('in Ollama\'s listing only Bonsai 2 is marked down by its size, and no copy tagged 4 bits or more is', () => {
+  // A card big enough for everything, and a family name with no history or abilities, so size and tag alone decide.
+  const everything = { vramGb: 1000 };
+  const bySize = (rows) => rows
+    .filter((entry) => /going by its size/.test(gradeModel({ ...entry, name: `newfamily:${entry.name.split(':')[1]}`, displayName: undefined }, everything).summary))
+    .map((entry) => entry.name)
+    .sort();
+  // rigmatch-fit's rows, in GiB, and the listing's own decimal GB as the app's catalog holds them.
+  const { families } = JSON.parse(readFileSync(new URL('../electron/ollamaCapabilities.json', import.meta.url), 'utf8'));
+  const listed = Object.entries(families).flatMap(([family, entry]) => Object.entries(entry.sizes ?? {})
+    .filter(([, info]) => info.sizeGb)
+    .map(([tag, info]) => ({ name: `${family}:${tag}`, params: tag, sizeGb: info.sizeGb })));
+  const bonsai = ['bonsai-2:27b', 'bonsai-2:4b', 'bonsai-2:9b'];
+  assert.deepEqual(bySize(catalogRows()), bonsai, 'rigmatch-fit');
+  assert.deepEqual(bySize(listed.filter((entry) => !/q\d/i.test(entry.params))), bonsai, 'the app');
+  const tagged = listed.filter((entry) => /(?:^|[-_])q[4-8]_/i.test(entry.params));
+  assert.ok(tagged.length > 100, `${tagged.length} copies tagged 4 bits or more`);
+  for (const entry of tagged) {
+    assert.doesNotMatch(gradeModel({ ...entry, name: `newfamily:${entry.params}` }, everything).summary, /squeezed/, entry.name);
+  }
 });
 
 test('a Models row reads the installed copy\'s label', () => {
