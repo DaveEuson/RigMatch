@@ -89,3 +89,20 @@ test('the footprint is read from Ollama\'s /api/ps listing, for this model only'
   assert.equal(loadedFootprint(null, 'x'), null);
   assert.equal(loadedFootprint({ models: [{ name: 'x:1b', size: 100 }] }, 'x:1b').share, 0, 'no size_vram: nothing on the card');
 });
+
+test('two models the same size in memory get the same Fit, whatever their names say', () => {
+  // Bonsai 2's ternary 27B (8.26 GB) and gemma3:12b (8.16 GB) on a 12 GB card.
+  // Through score version 6 Fit read the names and gave them 58 and 74.
+  const card = 12 * GB;
+  const loaded = { sizeBytes: 9.2 * GB, vramBytes: 9.2 * GB, share: 1 };
+  assert.notEqual(fitFromName('bonsai-2:27b'), fitFromName('gemma3:12b'));
+  assert.deepEqual(
+    fitFromPc({ model: 'bonsai-2:27b', footprint: loaded, graphicsBytes: card }),
+    fitFromPc({ model: 'gemma3:12b', footprint: loaded, graphicsBytes: card }),
+  );
+  // Estimated from the download (LM Studio) the same way.
+  assert.equal(
+    fitFromPc({ model: 'bonsai-2-27b', fileBytes: 8.26e9, graphicsBytes: card }).fit,
+    fitFromPc({ model: 'gemma-3-12b', fileBytes: 8.26e9, graphicsBytes: card }).fit,
+  );
+});
