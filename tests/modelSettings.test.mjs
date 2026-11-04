@@ -48,3 +48,18 @@ test('every answer request goes through the one place that applies the choice', 
   const judge = main.slice(main.indexOf('async function runJudgeGenerate'));
   assert.match(judge.slice(0, judge.indexOf('\n}\n')), /temperature: 0/);
 });
+
+test('a score asked with a model\'s own settings keeps that, and is labelled where scores are ranked', async () => {
+  const { toTestedModelScore, OWN_SETTINGS_NOTE } = await import('../src/lib/scoring.ts');
+  const result = {
+    model: 'qwen3:8b', completedAt: '2026-11-04T00:00:00Z', avgTokensPerSecond: 60, prompts: [],
+    scores: { total: 90, grade: 'A', speed: 100, sobriety: 80, stability: 100, fit: 100 },
+  };
+  assert.equal(toTestedModelScore({ ...result, sampling: 'model' }).sampling, 'model');
+  assert.equal('sampling' in toTestedModelScore(result), false, 'the usual settings add nothing');
+  assert.match(OWN_SETTINGS_NOTE, /not a like-for-like comparison/);
+  // Results ranks models from different runs side by side; the model page shows its one score.
+  const read = (path) => readFileSync(new URL(path, import.meta.url), 'utf-8');
+  assert.match(read('../src/components/UtilityPanel.tsx'), /score\.sampling === 'model' && \(\s*<span className="legacy-score-badge sampling-badge" title=\{OWN_SETTINGS_NOTE\}>Own settings<\/span>/);
+  assert.match(read('../src/components/ModelPage.tsx'), /score\.sampling === 'model' && <> · <abbr title=\{OWN_SETTINGS_NOTE\}>asked with its own settings<\/abbr><\/>/);
+});
