@@ -89,12 +89,8 @@ const capabilitiesFor = ollamaCatalog.ollamaCapabilitiesFor as (facts: {
 /** A plain size: "8b", "0.6b", "135m", "e4b", "8x7b" — not a quantization, a cloud tag or an MLX build. */
 const SIZE_TAG = /^(?:\d+(?:\.\d+)?[mb]|e\d+(?:\.\d+)?b|\d+x\d+(?:\.\d+)?b)$/i;
 
-/**
- * ollama.com's sizes are decimal GB (5.2 GB is 5.2 billion bytes), while
- * graphics memory and Ollama's own sizes for installed models are GiB. Graded
- * in the wrong unit, every download looked 7% bigger than it is.
- */
-const toGiB = (decimalGb: number) => Math.round(((decimalGb * 1e9) / 1024 ** 3) * 10) / 10;
+/** The snapshot holds ollama.com's decimal GB; graded in GiB, as the app's catalog is. */
+const toGiB = ollamaCatalog.decimalGbToGiB as (decimalGb: number) => number;
 
 /**
  * One row per downloadable size in the snapshot.

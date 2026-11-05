@@ -66,14 +66,31 @@ function isValidOllamaTag(tag) {
   return /^[a-z0-9][a-z0-9._-]*$/i.test(String(tag || ''));
 }
 
+/** A row's size as ollama.com writes it: decimal GB, so 512MB is 0.5. */
 function parseSizeToGb(detail) {
   const match = String(detail || '').match(/(\d+(?:\.\d+)?)\s*(GB|MB)/i);
   if (!match) return null;
   const value = Number.parseFloat(match[1]);
   if (!Number.isFinite(value)) return null;
   return match[2].toLowerCase() === 'mb'
-    ? Math.round((value / 1024) * 10) / 10
+    ? Math.round((value / 1000) * 10) / 10
     : Math.round(value * 10) / 10;
+}
+
+/**
+ * ollama.com's sizes are decimal GB (5.2 GB is 5.2 billion bytes). Graphics
+ * memory, free disk, download progress and Ollama's own sizes for installed
+ * models are GiB, so a listed size is converted before anything shows or
+ * compares it. Left as listed, every download looked 7% bigger than the copy
+ * it turns into.
+ */
+function decimalGbToGiB(decimalGb) {
+  return Math.round(((decimalGb * 1e9) / 1024 ** 3) * 10) / 10;
+}
+
+/** Catalog rows with their listed sizes in GiB. Rows with no size keep none. */
+function catalogSizesInGiB(entries) {
+  return entries.map((entry) => (entry.sizeGb > 0 ? { ...entry, sizeGb: decimalGbToGiB(entry.sizeGb) } : entry));
 }
 
 /**
@@ -326,6 +343,8 @@ module.exports = {
   isValidOllamaTag,
   extractOllamaNamespaceModels,
   parseSizeToGb,
+  decimalGbToGiB,
+  catalogSizesInGiB,
   inferParamsFromTag,
   inferParamsFromModelName,
   sortOllamaFamilyRows,

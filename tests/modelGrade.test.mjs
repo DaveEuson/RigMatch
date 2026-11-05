@@ -7,6 +7,7 @@ const { activeShare, describeSpeed, footprintFit, gradeModel, gradeRow, measured
 const { describeFitPlainly, getHardwareFit } = await import('../src/lib/modelCatalog.ts');
 const { MATCH_GRADE_BANDS } = await import('../src/lib/scoring.ts');
 const { catalogRows } = await import('../cli/fitCheck.ts');
+const { catalogSizesInGiB } = (await import('../electron/ollamaCatalog.cjs')).default;
 
 /**
  * The Fit grade folds fit, speed, answer quality and room to chat into one
@@ -432,11 +433,11 @@ test('in Ollama\'s listing only Bonsai 2 is marked down by its size, and no copy
     .filter((entry) => /going by its size/.test(gradeModel({ ...entry, name: `newfamily:${entry.name.split(':')[1]}`, displayName: undefined }, everything).summary))
     .map((entry) => entry.name)
     .sort();
-  // rigmatch-fit's rows, in GiB, and the listing's own decimal GB as the app's catalog holds them.
+  // rigmatch-fit's rows, and every listed size as the app's catalog hands it on (in GiB, as rigmatch-fit's are).
   const { families } = JSON.parse(readFileSync(new URL('../electron/ollamaCapabilities.json', import.meta.url), 'utf8'));
-  const listed = Object.entries(families).flatMap(([family, entry]) => Object.entries(entry.sizes ?? {})
+  const listed = catalogSizesInGiB(Object.entries(families).flatMap(([family, entry]) => Object.entries(entry.sizes ?? {})
     .filter(([, info]) => info.sizeGb)
-    .map(([tag, info]) => ({ name: `${family}:${tag}`, params: tag, sizeGb: info.sizeGb })));
+    .map(([tag, info]) => ({ name: `${family}:${tag}`, params: tag, sizeGb: info.sizeGb }))));
   const bonsai = ['bonsai-2:27b', 'bonsai-2:4b', 'bonsai-2:9b'];
   assert.deepEqual(bySize(catalogRows()), bonsai, 'rigmatch-fit');
   assert.deepEqual(bySize(listed.filter((entry) => !/q\d/i.test(entry.params))), bonsai, 'the app');
