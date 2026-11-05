@@ -81,6 +81,7 @@ const {
   parseOllamaFamilyFacts,
   ollamaCapabilitiesFor,
   applyCapabilitySnapshot,
+  catalogSizesInGiB,
 } = require('./ollamaCatalog.cjs');
 const { summarizeMemory, ollamaModelsDir, parseNvidiaSmiHeader, pickModelsFilesystem, resolveGpuPool, resolveModelsDir } = require('./systemProfile.cjs');
 const { createComfyBridge } = require('./comfy.cjs');
@@ -236,6 +237,7 @@ const CPU_LOAD_SAMPLE_MS = 750;
 let ollamaCatalogCache = null;
 let ollamaCatalogCacheAt = 0;
 
+// Sizes as ollama.com lists them, in decimal GB; catalogModels converts them.
 const curatedCatalog = [
   catalogEntry('llama3.2', '1b', 1.3, '1B', 'Lightweight'),
   catalogEntry('llama3.2', '3b', 2.0, '3B', 'Balanced'),
@@ -2878,7 +2880,7 @@ async function getOllamaCatalog(options = {}) {
     const result = {
       syncedAt: new Date().toISOString(),
       source: 'Ollama library live scan',
-      models: applyCapabilitySnapshot(mergeCatalogs(liveCatalog, fallback), OLLAMA_CAPABILITY_SNAPSHOT),
+      models: catalogModels(mergeCatalogs(liveCatalog, fallback)),
       error: null,
     };
     ollamaCatalogCache = result;
@@ -2896,7 +2898,7 @@ async function getOllamaCatalog(options = {}) {
     return {
       syncedAt: new Date().toISOString(),
       source: 'Bundled catalog',
-      models: applyCapabilitySnapshot(fallback, OLLAMA_CAPABILITY_SNAPSHOT),
+      models: catalogModels(fallback),
       error: error.message || 'Could not sync Ollama library',
     };
   } finally {
@@ -2919,6 +2921,14 @@ const OLLAMA_CAPABILITY_SNAPSHOT = (() => {
     return null;
   }
 })();
+
+/**
+ * The rows the app is given. Every size in them (the live pages, the bundled
+ * list, the snapshot) is ollama.com's decimal GB until here.
+ */
+function catalogModels(entries) {
+  return catalogSizesInGiB(applyCapabilitySnapshot(entries, OLLAMA_CAPABILITY_SNAPSHOT));
+}
 
 function mergeCatalogs(liveCatalog, fallback) {
   const map = new Map();

@@ -7,6 +7,8 @@ const require = createRequire(import.meta.url);
 const {
   parseOllamaFamilyRows,
   parseSizeToGb,
+  decimalGbToGiB,
+  catalogSizesInGiB,
   inferParamsFromTag,
   inferParamsFromModelName,
   sortOllamaFamilyRows,
@@ -70,10 +72,28 @@ test('parseOllamaFamilyRows: dedupes tags, tags latest, and marks rows live', ()
 test('parseSizeToGb: parses GB, converts MB, and rejects missing/garbage', () => {
   assert.equal(parseSizeToGb('22GB · 128K'), 22);
   assert.equal(parseSizeToGb('2.8 GB'), 2.8);
-  assert.equal(parseSizeToGb('512MB'), 0.5); // 512/1024 rounded to 1dp
+  assert.equal(parseSizeToGb('512MB'), 0.5); // decimal, as the page writes it
+  assert.equal(parseSizeToGb('960MB'), 1);
   assert.equal(parseSizeToGb('128K context, no size'), null);
   assert.equal(parseSizeToGb(''), null);
   assert.equal(parseSizeToGb(null), null);
+});
+
+test('catalog sizes reach the app in GiB, the unit of installed copies and graphics memory', () => {
+  // qwen2.5:7b: ollama.com lists 4.7GB; Ollama reports the installed copy as
+  // 4,683,087,332 bytes, which the app shows as 4.4 (bytes / 1024³). Left
+  // as listed, the row said 4.7 until the download finished.
+  assert.equal(decimalGbToGiB(4.7), 4.4);
+  assert.equal(Math.round((4683087332 / 1024 ** 3) * 10) / 10, 4.4);
+  assert.equal(decimalGbToGiB(20), 18.6);
+  const [listed, unsized, nulled] = catalogSizesInGiB([
+    { id: 'qwen2.5:7b', sizeGb: 4.7, tag: '7b' },
+    { id: 'x/new:latest', tag: 'latest' },
+    { id: 'family:latest', sizeGb: null },
+  ]);
+  assert.deepEqual(listed, { id: 'qwen2.5:7b', sizeGb: 4.4, tag: '7b' });
+  assert.equal(unsized.sizeGb, undefined);
+  assert.equal(nulled.sizeGb, null);
 });
 
 test('inferParamsFromTag / inferParamsFromModelName', () => {
