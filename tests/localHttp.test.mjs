@@ -25,6 +25,12 @@ function serve(handler) {
   });
 }
 
+/** An error whose message starts with `text`, compared as text: an address in a pattern would need escaping. */
+const saysFirst = (text) => (error) => {
+  assert.ok(error.message.startsWith(text), error.message);
+  return true;
+};
+
 const reply = (status, body) => (_req, res) => {
   res.writeHead(status, { 'Content-Type': 'application/json' });
   res.end(body);
@@ -69,7 +75,7 @@ test('a service that is not there, or dies mid-answer, cannot be reached; one th
   const gone = await serve(reply(200, '{}'));
   const goneUrl = gone.url;
   await gone.close();
-  await assert.rejects(fetchJson(`${goneUrl}/api/tags`, {}, 2000), new RegExp(`^Error: Cannot reach local AI service at ${goneUrl.replace(/\./g, '\\.')}\\. Make sure Ollama`));
+  await assert.rejects(fetchJson(`${goneUrl}/api/tags`, {}, 2000), saysFirst(`Cannot reach local AI service at ${goneUrl}. Make sure Ollama`));
 
   const dies = await serve((_req, res) => {
     res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -111,13 +117,13 @@ test('an error answer keeps its status and the service\'s own words; an oversize
   const failing = await serve(reply(500, '{"error":"model requires more system memory (12.0 GiB) than is available (8.1 GiB)"}'));
   try {
     await assert.rejects(fetchJson(`${failing.url}/api/generate`, { method: 'POST', body: '{}' }, 2000),
-      new RegExp(`^Error: 500 Internal Server Error from ${failing.url.replace(/\./g, '\\.')}/api/generate: model requires more system memory`));
+      saysFirst(`500 Internal Server Error from ${failing.url}/api/generate: model requires more system memory`));
   } finally {
     await failing.close();
   }
   const big = await serve(reply(200, JSON.stringify({ response: 'x'.repeat(5000) })));
   try {
-    await assert.rejects(fetchJson(`${big.url}/api/generate`, {}, 2000, 1000), new RegExp(`^Error: Response from ${big.url.replace(/\./g, '\\.')}/api/generate was too large$`));
+    await assert.rejects(fetchJson(`${big.url}/api/generate`, {}, 2000, 1000), (error) => error.message === `Response from ${big.url}/api/generate was too large`);
   } finally {
     await big.close();
   }
