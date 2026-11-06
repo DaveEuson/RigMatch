@@ -138,7 +138,7 @@ Where a model gives out moves with what else is using the card, so the card is r
 
 ## The Fit grade
 
-A is the best pick for this computer, F will not fit, and "?" means the model's size or your graphics memory is unknown. The grade weighs:
+A is the best pick for this computer, F will not fit, and "?" means the model's download size is unknown. The grade weighs:
 
 - whether the model fits in graphics memory, and how much room it leaves for a long chat
 - how fast it should run, estimated from its size and your card (a mixture-of-experts model counts only the part it runs per word)

@@ -48,8 +48,8 @@ test('each tier says what it needs: ready, a download with its size, or not run 
   const twelve = { vramGb: 12 };
   const installed = ['llama3.2:3b', 'gemma3:4b'];
   assert.deepEqual(tierAvailability(tier('light'), twelve, installed), { kind: 'ready' });
-  assert.deepEqual(tierAvailability(tier('standard'), twelve, installed), { kind: 'needs-download', sizeGb: 5.2 });
-  assert.deepEqual(tierAvailability(tier('heavy'), twelve, installed), { kind: 'needs-download', sizeGb: 9.3 });
+  assert.deepEqual(tierAvailability(tier('standard'), twelve, installed), { kind: 'needs-download', sizeGb: 4.8 });
+  assert.deepEqual(tierAvailability(tier('heavy'), twelve, installed), { kind: 'needs-download', sizeGb: 8.7 });
   assert.deepEqual(tierAvailability(tier('extreme'), twelve, [...installed, 'qwen3:30b-a3b']), { kind: 'too-big', needGb: 24, haveGb: 12 },
     'too big even when installed');
   assert.deepEqual(tierAvailability(tier('standard'), { vramGb: 6 }, ['qwen3:8b']), { kind: 'too-big', needGb: 8, haveGb: 6 });
@@ -108,7 +108,7 @@ test('every way a tier can end without a result is said in words', () => {
   const said = (reply, id = 'standard') => assembleTierResult(tier(id), reply, 'x');
   const missing = said({ status: 'not-installed' });
   assert.equal(missing.kind, 'not-installed');
-  assert.match(missing.message, /qwen3:8b is not installed\. It is a 5\.2 GB download\./);
+  assert.match(missing.message, /qwen3:8b is not installed\. It is a 4\.8 GB download\./);
 
   const small = said({ status: 'too-big', machine: { ...machine, vramGb: 12 } }, 'extreme');
   assert.equal(small.kind, 'too-big');

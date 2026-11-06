@@ -87,7 +87,7 @@ async function detectHardware(vramFlag: string | undefined): Promise<FitHardware
     const vramGb = Number(vramFlag);
     if (!Number.isFinite(vramGb) || vramGb < 0) throw new Error(`--vram takes a number of GB, such as --vram 12, not "${vramFlag}".`);
     // 0 means no graphics card at all, which is graded as such: a model too
-    // big for the processor is an F, not the "?" an unreadable card gets.
+    // big for the processor is an F.
     return vramGb === 0
       ? { ...common, gpu: 'No graphics card', vramGb: 0, unifiedMemory: false, ramGb: toGb(os.totalmem()), source: 'flag', noGpu: true }
       : { ...common, gpu: `A ${vramGb} GB graphics card`, vramGb, unifiedMemory: false, ramGb: toGb(os.totalmem()), source: 'flag' };

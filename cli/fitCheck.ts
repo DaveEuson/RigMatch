@@ -15,7 +15,7 @@
 
 import snapshot from '../electron/ollamaCapabilities.json' with { type: 'json' };
 import ollamaCatalog from '../electron/ollamaCatalog.cjs';
-import { gradeModel, mixtureSpillFit, pullCommand, type FitGrade, type GradeRow } from '../src/lib/modelGrade.ts';
+import { gradeModel, mixtureSpillFit, pullCommand, unifiedMemoryFit, type FitGrade, type GradeRow } from '../src/lib/modelGrade.ts';
 import { canGenerateText, isEmbeddingModel } from '../src/lib/modelCatalog.ts';
 import { isSpecialistModel } from '../src/lib/chooseLineup.ts';
 import { NON_CHAT_NOTE, NON_CHAT_TAG, nonChatKind, type NonChatKind } from '../src/lib/modelKind.ts';
@@ -47,6 +47,14 @@ export type InstalledModel = {
 };
 
 /**
+ * A cloud model: Ollama lists it like any other, but it runs on Ollama's
+ * servers. Ollama marks one with a remote host in /api/tags; a name ending in
+ * -cloud or :cloud is the same thing before it has been pulled.
+ */
+export const CLOUD_TAG = /[:-]cloud$/i;
+export const isCloudModel = (model: { name: string; remote?: boolean }) => Boolean(model.remote) || CLOUD_TAG.test(model.name);
+
+/**
  * Where Ollama listens, read from OLLAMA_HOST the way Ollama's own client
  * reads it (envconfig.Host): with no scheme the port defaults to 11434, with
  * http:// to 80 and with https:// to 443, and a path is kept, so a proxy at
@@ -59,10 +67,12 @@ export function ollamaUrl(raw = process.env.OLLAMA_HOST): string {
   const slash = rest.indexOf('/');
   const hostPort = slash < 0 ? rest : rest.slice(0, slash);
   const path = slash < 0 ? '' : rest.slice(slash).replace(/\/+$/, '');
-  const withPort = hostPort.match(/^(\[[^\]]+\]|[^:]+):(\d+)$/);
-  const host = (withPort ? withPort[1] : hostPort) || '127.0.0.1';
+  const withPort = hostPort.match(/^(\[[^\]]+\]|[^:]*):(\d+)$/);
+  const host = withPort ? withPort[1] : hostPort;
   const port = withPort ? withPort[2] : scheme === 'https' ? '443' : scheme === 'http' ? '80' : '11434';
-  return `${scheme ?? 'http'}://${host === '0.0.0.0' ? '127.0.0.1' : host}:${port}${path}`;
+  // A server address that means "every interface" (":11434", 0.0.0.0, ::) is this computer to a client.
+  const local = !host || ['0.0.0.0', '::', '[::]'].includes(host);
+  return `${scheme ?? 'http'}://${local ? '127.0.0.1' : host}:${port}${path}`;
 }
 
 /** A catalog size, with the other names Ollama lists it under. */
@@ -147,9 +157,11 @@ export function rankModels(
   hardware: Pick<FitHardware, 'vramGb' | 'unifiedMemory'> & Partial<Pick<FitHardware, 'gpu' | 'ramGb' | 'noGpu'>>,
   { installed = null, provider = 'ollama' }: { installed?: InstalledModel[] | null; provider?: Provider } = {},
 ): RankedModel[] {
-  const byName = new Map((installed ?? []).map((model) => [model.name, model]));
+  // A cloud model runs on Ollama's servers, so this computer has nothing to grade for it.
+  const local = (installed ?? []).filter((model) => !isCloudModel(model));
+  const byName = new Map(local.map((model) => [model.name, model]));
   const known = new Set(catalog.flatMap((row) => [row.name, ...(row.aliases ?? [])]));
-  const extra: CatalogRow[] = (installed ?? [])
+  const extra: CatalogRow[] = local
     .filter((model) => !known.has(model.name))
     .map((model) => ({ name: model.name, displayName: model.name, params: model.params ?? '', sizeGb: model.sizeGb || null, quantization: model.quantization }))
     .filter(isListed);
@@ -159,7 +171,7 @@ export function rankModels(
       const merged: CatalogRow = have
         ? { ...listed, sizeGb: have.sizeGb || listed.sizeGb, params: have.params || listed.params, quantization: have.quantization }
         : listed;
-      const spill = mixtureSpillFit(merged, hardware);
+      const spill = mixtureSpillFit(merged, hardware) ?? unifiedMemoryFit(merged, hardware);
       const row = spill ? { ...merged, fitOverride: spill } : merged;
       return {
         row,
@@ -339,7 +351,7 @@ export function formatTable(
   const top = running[0];
   if (show && top) {
     const speed = top.grade.tokensPerSecond ? `, ~${Math.round(top.grade.tokensPerSecond)} tok/s` : '';
-    const hello = provider === 'lm-studio' ? `Find it with: lms get ${top.row.name}` : `Say hi: ollama run ${top.row.name}`;
+    const hello = provider === 'lm-studio' ? `Find it with: ${pullCommand(top.row.name, provider)}` : `Say hi: ollama run ${top.row.name}`;
     lines.push('', ...wrap(`Tonight's Top Match: ${top.row.name} (${top.grade.letter}${speed}). ${hello}`, columns));
   }
   return lines.join('\n');

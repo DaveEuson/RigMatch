@@ -52,6 +52,7 @@ test('--measure is a switch, with an optional model after it, and keeps away fro
   assert.deepEqual(checkMeasureArgs({ measure: true, provider: 'ollama' }, []), { model: undefined });
   assert.deepEqual(checkMeasureArgs({ measure: true, provider: 'ollama' }, ['qwen3.5:9b']), { model: 'qwen3.5:9b' });
   assert.throws(() => checkMeasureArgs({ measure: false }, ['qwen3:8b']), /To measure a model's real speed: rigmatch-fit --measure qwen3:8b/);
+  assert.throws(() => checkMeasureArgs({ measure: false }, ['help']), /^Error: Unexpected "help"\. rigmatch-fit --help lists what it takes\.$/, 'a word that is not a model is not offered to --measure');
   assert.throws(() => checkMeasureArgs({ measure: true }, ['a', 'b']), /one model at a time/);
   assert.throws(() => checkMeasureArgs({ measure: true, vram: '16' }, []), /--vram grades for another card/);
   assert.throws(() => checkMeasureArgs({ measure: true, installed: true }, []), /use one or the other/);
@@ -153,7 +154,7 @@ test('--json has the measures, each stamp and points, and nothing about who ran 
   assert.equal(standard.points, 1000);
   assert.equal(standard.band, 'excellent');
   assert.deepEqual(Object.keys(standard.stamp).sort(), ['appVersion', 'driverVersion', 'gpu', 'model', 'modelDigest', 'numCtx', 'ollamaVersion', 'quantization', 'tier', 'vramGb', 'workloadVersion']);
-  assert.deepEqual(json.tiers[2], { tier: 'heavy', model: 'qwen3:14b', status: 'missing', command: 'ollama pull qwen3:14b', sizeGb: 9.3 });
+  assert.deepEqual(json.tiers[2], { tier: 'heavy', model: 'qwen3:14b', status: 'missing', command: 'ollama pull qwen3:14b', sizeGb: 8.7 });
   assert.deepEqual(json.headline, { tier: 'standard', isHeadlineTier: true, points: 1000, pointsNote: null, writingTps: 66.2, band: 'excellent' });
   const text = JSON.stringify(json);
   assert.doesNotMatch(text, /hostname|127\.0\.0\.1|localhost|Wrenmouth|Reading 1\.|[A-Z]:\\|\/home\//, 'no host, address, prompt or path');

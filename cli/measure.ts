@@ -157,7 +157,10 @@ export function checkMeasureArgs(
   positionals: readonly string[],
 ): { model: string | undefined } | null {
   if (!values.measure) {
-    if (positionals.length) throw new Error(`Unexpected "${positionals[0]}". To measure a model's real speed: rigmatch-fit --measure ${positionals[0]}`);
+    // "qwen3:8b" or "llama3.2" reads as a model; "help" or "list" does not.
+    const word = positionals[0];
+    if (word && !/[:\d/]/.test(word)) throw new Error(`Unexpected "${word}". rigmatch-fit --help lists what it takes.`);
+    if (positionals.length) throw new Error(`Unexpected "${word}". To measure a model's real speed: rigmatch-fit --measure ${word}`);
     return null;
   }
   if (positionals.length > 1) throw new Error('--measure takes one model at a time, or none to run the RigScore tiers.');
@@ -275,14 +278,11 @@ export type PlanEntry =
   | { tier: RigTier; kind: 'cloud' };
 
 /**
- * A cloud model: Ollama lists it like any other, but it runs on Ollama's
- * servers. Measured, its speed would be a data centre's, stamped with this
- * PC's card, and the prompts would leave this computer. Ollama marks one with a
- * remote host in /api/tags; a name ending in -cloud or :cloud is the same
- * thing before it has been pulled.
+ * A cloud model (CLOUD_TAG, isCloudModel in fitCheck.ts). Measured, its speed
+ * would be a data centre's, stamped with this PC's card, and the prompts would
+ * leave this computer.
  */
-export const CLOUD_TAG = /[:-]cloud$/i;
-export const isCloudModel = (model: { name: string; remote?: boolean }) => Boolean(model.remote) || CLOUD_TAG.test(model.name);
+export { CLOUD_TAG, isCloudModel } from './fitCheck.ts';
 
 export const cloudMessage = (model: string) => `${model} runs on Ollama's servers, not on this computer, so there is nothing of this PC to measure, and the prompts would leave it. rigmatch-fit --measure runs local models only.`;
 

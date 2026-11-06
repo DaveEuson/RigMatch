@@ -97,12 +97,14 @@ test('snapshot: fills what the live scan did not reach, and the live page wins',
     gemma3: { badges: ['vision'], description: 'Gemma 3', sizes: { '1b': { inputs: ['text'], sizeGb: 0.8 }, '4b': { inputs: ['text', 'image'], sizeGb: 3.3 } } },
     'kimi-k2.6': { badges: ['vision', 'tools', 'thinking', 'cloud'], description: 'Kimi', sizes: { cloud: { inputs: ['text', 'image'], cloudOnly: true } } },
   } };
-  const [small, big, live, cloud] = applyCapabilitySnapshot([
+  const [small, big, live, cloud, bundled] = applyCapabilitySnapshot([
     { id: 'gemma3:1b', name: 'gemma3', tag: '1b', sizeGb: null },
     { id: 'gemma3:4b', name: 'gemma3', tag: '4b', sizeGb: 3.1 },
     { id: 'gemma3:12b', name: 'gemma3', tag: '12b', capabilities: ['completion'] },
     { id: 'kimi-k2.6:latest', name: 'kimi-k2.6', tag: 'latest' },
+    { id: 'gemma3:4b', name: 'gemma3', tag: '4b', sizeGb: 2.0, live: false },
   ], snapshot);
+  assert.equal(bundled.sizeGb, 3.3, 'a hand-typed bundled size gives way to the snapshot');
   assert.deepEqual(small.capabilities, ['completion']);
   assert.deepEqual(big.capabilities, ['completion', 'vision']);
   assert.equal(small.description, 'Gemma 3');
@@ -124,4 +126,25 @@ test('the shipped snapshot is readable and covers the catalog', () => {
     assert.equal(typeof record.sizes, 'object', `${family}: sizes`);
   }
   assert.ok(snapshot.families.embeddinggemma?.badges.includes('embedding'));
+});
+
+test('sizes typed by hand elsewhere in the app match the snapshot, in GiB', async () => {
+  const { decimalGbToGiB } = require('../electron/ollamaCatalog.cjs');
+  const { families } = require('../electron/ollamaCapabilities.json');
+  const { RIG_TIERS } = await import('../src/lib/rigScore.ts');
+  const { USE_CASES, getFirstModelPicks } = await import('../src/lib/firstModel.ts');
+  const typed = [
+    ...RIG_TIERS.map((tier) => [tier.model, tier.sizeGb]),
+    ...USE_CASES.flatMap(({ id }) => [4, 8, 12, 24].flatMap((vramGb) => getFirstModelPicks(id, vramGb)))
+      .map((pick) => [pick.id, Number.parseFloat(pick.size)]),
+  ];
+  let checked = 0;
+  for (const [id, sizeGb] of typed) {
+    const [name, tag] = id.split(':');
+    const listed = families[name]?.sizes?.[tag]?.sizeGb;
+    if (!listed) continue;
+    checked += 1;
+    assert.equal(sizeGb, decimalGbToGiB(listed), `${id} says ${sizeGb} GB; ollama.com lists ${listed} GB, which is ${decimalGbToGiB(listed)} GiB`);
+  }
+  assert.ok(checked >= 20, `only ${checked} sizes were checked`);
 });

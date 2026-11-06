@@ -13,6 +13,7 @@ import {
 } from '../lib/contextEndurance';
 import { formatDateTime, formatGb, formatThroughputValue } from '../lib/format';
 import { formatLocale } from '../lib/formatLocale';
+import { isEmbeddingModel } from '../lib/modelCatalog';
 import { rigScoreSession as session, useRigScoreSession } from '../lib/rigScoreLive';
 import type { OllamaModel } from '../types';
 import './ContextEndurance.css';
@@ -101,7 +102,8 @@ export function ContextEndurance({ models, ready, busy }: {
   busy: boolean;
 }) {
   const state = useRigScoreSession();
-  const local = models.filter((entry) => entry.provider !== 'lm-studio' && !CLOUD_TAG.test(entry.name));
+  // An embedding model writes no text, so Ollama refuses the check's prompts.
+  const local = models.filter((entry) => entry.provider !== 'lm-studio' && !CLOUD_TAG.test(entry.name) && !isEmbeddingModel(entry.name));
   const [picked, setPicked] = useState('');
   const withResult = local.find((entry) => state.enduranceResults.some((result) => result.model === entry.name));
   const model = local.find((entry) => entry.name === picked) ?? withResult ?? local[0];

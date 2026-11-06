@@ -167,7 +167,9 @@ test('a terminal gets the show: the marquee and the Top Match, in ASCII', () => 
   const speed = Math.round(top.grade.tokensPerSecond);
   assert.equal(lines.at(-1), `Tonight's Top Match: ${top.row.name} (${top.grade.letter}, ~${speed} tok/s). Say hi: ollama run ${top.row.name}`);
   assert.match(table, ascii);
-  assert.ok(formatTable(ranked, card, { provider: 'lm-studio', show: true }).endsWith(`Find it with: lms get ${top.row.name}`));
+  // The same command as the table's, in LM Studio's own name for the model.
+  const lmsTop = formatTable(ranked, card, { provider: 'lm-studio', show: true });
+  assert.ok(lmsTop.endsWith(`Find it with: lms get ${top.row.name.replace(':', '-')}`), lmsTop.split('\n').at(-1));
 
   // Too narrow for the sign, the plain title, and the Top Match still fits.
   const narrow = formatTable(ranked, card, { ollamaReachable: true, columns: 40, show: true }).split('\n');
@@ -242,6 +244,37 @@ test('OLLAMA_HOST is read the way Ollama reads it', () => {
   assert.equal(ollamaUrl('0.0.0.0'), 'http://127.0.0.1:11434', '0.0.0.0 is where a server listens, not an address to call');
   assert.equal(ollamaUrl('0.0.0.0:11500'), 'http://127.0.0.1:11500');
   assert.equal(ollamaUrl('[::1]:11434'), 'http://[::1]:11434');
+  assert.equal(ollamaUrl(':11434'), 'http://127.0.0.1:11434', 'no host is every interface, which Ollama\'s client calls locally');
+  assert.equal(ollamaUrl('::'), 'http://127.0.0.1:11434');
+  assert.equal(ollamaUrl('[::]:11500'), 'http://127.0.0.1:11500');
+});
+
+test('cloud models in Ollama\'s list are not graded: they run on Ollama\'s servers', () => {
+  const installed = [
+    { name: 'gpt-oss:120b-cloud', sizeGb: 0, params: '116.8B', remote: true },
+    { name: 'renamed:latest', sizeGb: 0, params: '480B', remote: true },
+    { name: 'qwen3.5:9b', sizeGb: 6.1, params: '9.0B' },
+  ];
+  const ranked = rankModels(catalogRows(), card, { installed });
+  assert.deepEqual(ranked.filter((model) => model.installed).map((model) => model.row.name), ['qwen3.5:9b']);
+  assert.ok(!ranked.some((model) => /cloud|renamed/.test(model.row.name)), 'no row is made for one either');
+});
+
+test('on shared memory, a model bigger than all of it will not fit, and one past its share is a tight fit', () => {
+  const mac = { gpu: 'Apple M2', vramGb: 16, unifiedMemory: true, ramGb: 16, platform: 'darwin', arch: 'arm64', source: 'detected' };
+  const ranked = rankModels(catalogRows(), mac);
+  const grade = (name) => ranked.find((model) => model.row.name === name);
+  const huge = grade('qwen3:30b');
+  assert.equal(huge.grade.letter, 'F', `${huge.row.sizeGb} GB on 16 GB: ${huge.grade.summary}`);
+  assert.match(huge.grade.fit.label, /^Too big/);
+  assert.ok(!ranked.filter(inDefaultList).includes(huge), 'not among the ones that run here');
+  // Past the 70% a model can have beside macOS, and within the 80% a card calls a good fit.
+  const tight = ranked.find((model) => model.row.sizeGb > 11.2 && model.row.sizeGb <= 12.8 && model.grade.letter !== '?');
+  assert.ok(tight, 'a model sized between 70% and 80% of 16 GB');
+  assert.match(tight.grade.fit.label, /^Tight fit/, `${tight.row.name} ${tight.row.sizeGb} GB`);
+  assert.ok(['C', 'D'].includes(tight.grade.letter) || tight.grade.points <= 69, tight.grade.summary);
+  // Well within the share, the card rules stand.
+  assert.notEqual(grade('qwen3:8b').grade.fit.tone, 'tight');
 });
 
 test('the command runs from source: --json, --provider, --vram 0 and its errors', async () => {

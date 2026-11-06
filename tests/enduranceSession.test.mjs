@@ -65,6 +65,26 @@ test('a context check names the card it ran on, keeps the result for that model,
   assert.deepEqual(made.getState().enduranceResults.map((result) => result.model).sort(), ['llama3.2:3b', 'qwen3:14b'], 'one per model');
 });
 
+test('a check that could not conclude does not replace a sound reading of the same model', async () => {
+  const wrongSize = { ...done, stages: done.stages.map((stage, index) => (index === 0 ? { ...stage, promptTokens: 666, sizeOk: false } : stage)) };
+  const first = session(bridge(done));
+  await first.made.checkContext('qwen3:14b');
+  const sound = first.made.getState().enduranceResults;
+  assert.equal(sound[0].verdict.kind, 'holds');
+
+  const { made, writes } = session(bridge(wrongSize), sound);
+  await made.checkContext('qwen3:14b');
+  const state = made.getState();
+  assert.equal(writes.length, 0, 'nothing is saved');
+  assert.deepEqual(state.enduranceResults, sound, 'the sound reading stands');
+  assert.match(state.enduranceMessages['qwen3:14b'], /^This check did not count: The 2K prompt came out at 666 tokens/);
+
+  // With nothing earlier to keep, the inconclusive result is kept, so the reason shows.
+  const fresh = session(bridge(wrongSize));
+  await fresh.made.checkContext('qwen3:14b');
+  assert.equal(fresh.made.getState().enduranceResults[0].verdict.kind, 'unchecked');
+});
+
 test('while a check runs the card counts as taken: no speed test starts, progress is shown, Stop cancels it', async () => {
   let release;
   const fake = bridge((request) => new Promise((resolve) => { release = () => resolve({ status: 'stopped' }); fake.emit({ id: request.progressId, phase: 'stage', stage: 'page', index: 2, of: 3 }); }));
