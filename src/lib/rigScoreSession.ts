@@ -154,7 +154,14 @@ export function createRigSession(
   const recordEndurance = (model: string, outcome: EnduranceOutcome) => {
     const current = getState();
     const enduranceMessages = { ...current.enduranceMessages };
-    if (outcome.kind === 'measured') {
+    // A check that could not conclude says nothing about the model, so it does
+    // not replace a reading that did; why it did not count is said instead.
+    const inconclusive = outcome.kind === 'measured' && outcome.result.verdict.kind === 'unchecked'
+      && current.enduranceResults.some((entry) => entry.model === model && entry.verdict.kind !== 'unchecked');
+    if (outcome.kind === 'measured' && inconclusive) {
+      enduranceMessages[model] = `This check did not count: ${outcome.result.verdict.detail} The reading shown is from the last check that did.`;
+      set({ enduranceMessages });
+    } else if (outcome.kind === 'measured') {
       delete enduranceMessages[model];
       const enduranceResults = addEnduranceResult(current.enduranceResults, outcome.result);
       set({ enduranceResults, enduranceMessages, saveFailed: !saveEndurance(enduranceResults) });

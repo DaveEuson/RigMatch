@@ -266,6 +266,20 @@ test('it calibrates at the first size, runs the three sizes, reads speeds from O
   }
 });
 
+test('a passkey that comes back in the thinking still came back: gpt-oss thinks whatever it is asked', async () => {
+  const fake = await fakeOllama({ installed: [MODEL], onGenerate: (body) => {
+    const answer = simulate()(body);
+    return { ...answer, reply: { ...answer.reply, thinking: `The user wants the passkey. ${answer.reply.response}`, response: '' } };
+  } });
+  try {
+    const reply = await run({ fake });
+    assert.equal(reply.status, 'done');
+    assert.deepEqual(reply.stages.map((stage) => stage.passkeyKept), [true, true, true]);
+  } finally {
+    await fake.close();
+  }
+});
+
 test('it sizes from the model\'s own tokenizer: the same stages at 22 and at 55 tokens a line', async () => {
   for (const perLine of [22, 55]) {
     const fake = await fakeOllama({ installed: [MODEL], onGenerate: simulate({ perLine }) });

@@ -115,7 +115,13 @@ async function readLoaded(fetchJson, baseUrl, signal) {
   return null;
 }
 
-const passkeyKept = (response, passkey) => typeof response === 'string' && response.includes(passkey);
+/**
+ * Whether the passkey came back. A model Ollama cannot stop thinking (gpt-oss
+ * ignores think:false) can spend the reply in `thinking` and leave `response`
+ * short or empty; finding the passkey there is still finding it.
+ */
+const passkeyKept = (reply, passkey) => [reply?.response, reply?.thinking]
+  .some((text) => typeof text === 'string' && text.includes(passkey));
 
 function boundedInteger(value, min, max, label) {
   const number = Number(value);
@@ -318,7 +324,7 @@ async function timedStages({ plan, baseUrl, fetchJson, isUnsupportedThinkError, 
       loadSeconds: (index === 0 ? firstLoadSeconds : 0) + seconds(reply?.load_duration),
       gpuShare: size ? Math.min(1, Math.max(0, (Number(entry.size_vram) || 0) / size)) : null,
       contextReported: normalizePositiveNumber(entry?.context_length),
-      passkeyKept: passkeyKept(reply?.response, passkey),
+      passkeyKept: passkeyKept(reply, passkey),
       sizeOk: promptSizeOk(promptTokens, stage.targetTokens),
     });
   }
