@@ -153,7 +153,7 @@ test('--json has the measures, each stamp and points, and nothing about who ran 
   assert.equal(standard.points, 1000);
   assert.equal(standard.band, 'excellent');
   assert.deepEqual(Object.keys(standard.stamp).sort(), ['appVersion', 'driverVersion', 'gpu', 'model', 'modelDigest', 'numCtx', 'ollamaVersion', 'quantization', 'tier', 'vramGb', 'workloadVersion']);
-  assert.deepEqual(json.tiers[2], { tier: 'heavy', model: 'qwen3:14b', status: 'missing', command: 'ollama pull qwen3:14b', sizeGb: 9.3 });
+  assert.deepEqual(json.tiers[2], { tier: 'heavy', model: 'qwen3:14b', status: 'missing', command: 'ollama pull qwen3:14b', sizeGb: 8.7 });
   assert.deepEqual(json.headline, { tier: 'standard', isHeadlineTier: true, points: 1000, pointsNote: null, writingTps: 66.2, band: 'excellent' });
   const text = JSON.stringify(json);
   assert.doesNotMatch(text, /hostname|127\.0\.0\.1|localhost|Wrenmouth|Reading 1\.|[A-Z]:\\|\/home\//, 'no host, address, prompt or path');

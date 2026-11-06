@@ -302,6 +302,10 @@ function parseOllamaFamilyRows(name, html) {
  * A family the scan listed but did not open arrives as one "latest" row with
  * no size, which "Good fit" cannot place and so hid: qwen2.5vl and llama4
  * were missing from Reads images that way. The snapshot's size fills it.
+ *
+ * A bundled row (live: false) takes the snapshot's size over its own. The
+ * bundled sizes are typed by hand and drift as ollama.com rebuilds a tag:
+ * smallthinker was listed at 1.2 GB against a real 3.6 GB.
  */
 function applyCapabilitySnapshot(entries, snapshot) {
   const families = snapshot?.families ?? {};
@@ -328,7 +332,7 @@ function applyCapabilitySnapshot(entries, snapshot) {
       ...(capabilities ? { capabilities } : {}),
       ...(facts.description && !entry.description ? { description: facts.description } : {}),
       ...(sizes[tag]?.cloudOnly ? { cloudOnly: true } : {}),
-      ...(entry.sizeGb == null && sizes[tag]?.sizeGb ? { sizeGb: sizes[tag].sizeGb } : {}),
+      ...((entry.sizeGb == null || entry.live === false) && sizes[tag]?.sizeGb ? { sizeGb: sizes[tag].sizeGb } : {}),
     };
   });
 }

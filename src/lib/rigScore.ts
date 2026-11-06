@@ -19,7 +19,7 @@ export type RigTier = {
   label: string;
   /** The exact Ollama tag every machine runs, so the weights are the same. */
   model: string;
-  /** Download size, so a person is told before it is fetched. */
+  /** Download size in GiB, as the Models list shows it, so a person is told before it is fetched. */
   sizeGb: number;
   /** Below this the tier would spill into system memory and measure that instead. */
   minVramGb: number;
@@ -30,10 +30,10 @@ export type RigTier = {
  * a zero would read as a very slow computer when it is only a small card.
  */
 export const RIG_TIERS: readonly RigTier[] = [
-  { id: 'light', label: 'Light', model: 'llama3.2:3b', sizeGb: 2.0, minVramGb: 4 },
-  { id: 'standard', label: 'Standard', model: 'qwen3:8b', sizeGb: 5.2, minVramGb: 8 },
-  { id: 'heavy', label: 'Heavy', model: 'qwen3:14b', sizeGb: 9.3, minVramGb: 12 },
-  { id: 'extreme', label: 'Extreme', model: 'qwen3:30b-a3b', sizeGb: 18, minVramGb: 24 },
+  { id: 'light', label: 'Light', model: 'llama3.2:3b', sizeGb: 1.9, minVramGb: 4 },
+  { id: 'standard', label: 'Standard', model: 'qwen3:8b', sizeGb: 4.8, minVramGb: 8 },
+  { id: 'heavy', label: 'Heavy', model: 'qwen3:14b', sizeGb: 8.7, minVramGb: 12 },
+  { id: 'extreme', label: 'Extreme', model: 'qwen3:30b-a3b', sizeGb: 17.7, minVramGb: 24 },
 ];
 
 /** The tier a score is headlined by: the one most computers that run local AI can hold. */
