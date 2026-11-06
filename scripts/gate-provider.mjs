@@ -21,6 +21,7 @@
 
 import { createServer } from 'node:http';
 import { readFileSync } from 'node:fs';
+import { loadAppFetchJson } from './app-fetch-json.mjs';
 
 const results = [];
 const record = (name, ok, note) => {
@@ -44,25 +45,9 @@ const main = readFileSync('electron/main.cjs', 'utf-8');
   record('the benchmark passes its own timeout, not the 2.5s default', passesBenchmarkTimeout);
 }
 
-/** The app's own helper, reproduced exactly enough to exercise the behavior. */
-async function appFetchJson(url, options = {}, timeoutMs = 2500) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const response = await fetch(url, {
-      ...options,
-      signal: controller.signal,
-      headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
-    });
-    if (!response.ok) {
-      const detail = await response.text();
-      throw new Error(`${response.status} ${response.statusText} from ${new URL(url).host}${detail ? `: ${detail.slice(0, 80)}` : ''}`);
-    }
-    return await response.json();
-  } finally {
-    clearTimeout(timer);
-  }
-}
+// The app's own helper, lifted from main.cjs. A copy kept here used fetch
+// after the app had moved to node:http, and so tested something else.
+const appFetchJson = loadAppFetchJson();
 
 /** A fake Ollama that behaves badly on demand. */
 function fakeOllama(mode) {

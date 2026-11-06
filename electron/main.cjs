@@ -36,6 +36,7 @@ const { DRAWING_ANSWER_TOKENS, DRAWING_TIMEOUT_MS, checkDrawing, drawingTimedOut
 const { runRigTier, unloadOllamaModel } = require('./rigScoreRunner.cjs');
 const { runEndurance } = require('./enduranceRunner.cjs');
 const { fitFromPc, loadedFootprint } = require('./matchFit.cjs');
+const { localRequest } = require('./localHttp.cjs');
 const { gradeFor, totalsFromPrompts } = require('./benchmarkTotals.cjs');
 const { transientFailure, canRetest, mergeRetest } = require('./benchmarkRetest.cjs');
 const { secondJudge, combineMarks } = require('./judgePanel.cjs');
@@ -1982,14 +1983,17 @@ async function fetchJson(url, options = {}, timeoutMs = 2500, maxBytes = JSON_RE
   }
 
   try {
-    const response = await fetch(url, {
-      ...options,
+    // node:http, not fetch: fetch gives up after 300 s with no headers,
+    // whatever timeoutMs says (localHttp.cjs).
+    const response = await localRequest(url, {
+      method: options.method,
+      body: options.body,
       signal: controller.signal,
       headers: {
         'Content-Type': 'application/json',
         ...(options.headers || {}),
       },
-    });
+    }, { maxBytes, tooLarge: () => new Error(`Response from ${getUrlLabel(url)} was too large`) });
 
     if (!response.ok) {
       const detail = extractResponseDetail(await response.text());
@@ -2025,7 +2029,9 @@ async function fetchJson(url, options = {}, timeoutMs = 2500, maxBytes = JSON_RE
       );
     }
 
-    if (error?.message === 'fetch failed' || error?.name === 'TypeError') {
+    // A bad address (TypeError), or a connection refused, reset or closed
+    // mid-answer: node:http's errors carry a code such as ECONNREFUSED.
+    if (error?.name === 'TypeError' || typeof error?.code === 'string') {
       throw new Error(`Cannot reach local AI service at ${getUrlOrigin(url)}. Make sure Ollama or LM Studio is installed, running, and serving a local API.`);
     }
 
