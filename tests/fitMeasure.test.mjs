@@ -52,6 +52,7 @@ test('--measure is a switch, with an optional model after it, and keeps away fro
   assert.deepEqual(checkMeasureArgs({ measure: true, provider: 'ollama' }, []), { model: undefined });
   assert.deepEqual(checkMeasureArgs({ measure: true, provider: 'ollama' }, ['qwen3.5:9b']), { model: 'qwen3.5:9b' });
   assert.throws(() => checkMeasureArgs({ measure: false }, ['qwen3:8b']), /To measure a model's real speed: rigmatch-fit --measure qwen3:8b/);
+  assert.throws(() => checkMeasureArgs({ measure: false }, ['help']), /^Error: Unexpected "help"\. rigmatch-fit --help lists what it takes\.$/, 'a word that is not a model is not offered to --measure');
   assert.throws(() => checkMeasureArgs({ measure: true }, ['a', 'b']), /one model at a time/);
   assert.throws(() => checkMeasureArgs({ measure: true, vram: '16' }, []), /--vram grades for another card/);
   assert.throws(() => checkMeasureArgs({ measure: true, installed: true }, []), /use one or the other/);

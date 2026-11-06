@@ -292,7 +292,7 @@ import {
   type LineupOutcome,
   type VideoLineupEntry,
 } from './lib/videoLineup';
-import { footprintFit, mixtureSpillFit } from './lib/modelGrade';
+import { footprintFit, mixtureSpillFit, unifiedMemoryFit } from './lib/modelGrade';
 import { formatVideoEstimate, videoFit } from './lib/videoFit';
 import { readVideoCalibration } from './lib/videoCalibrationStore';
 import { runImageLabChallenge } from './lib/imageGenRunner';
@@ -771,12 +771,13 @@ function App() {
     () => {
       // A mixture of experts too big for graphics memory can still run with
       // part of it in system memory; the override reaches the fit pill, the
-      // download guard and Simple Mode alike (mixtureSpillFit).
+      // download guard and Simple Mode alike (mixtureSpillFit). Shared memory
+      // has no system memory to spill into, so it gets its own (unifiedMemoryFit).
       const spillHardware = {
         vramGb: system.gpu.vramGb, unifiedMemory: Boolean(system.gpu.isUnifiedMemory), ramGb: system.memory.totalGb, gpu: system.gpu.model,
       };
       const rows = mergeModelRows(catalog, localModels).map((row) => {
-        const spill = mixtureSpillFit(row, spillHardware);
+        const spill = mixtureSpillFit(row, spillHardware) ?? unifiedMemoryFit(row, spillHardware);
         return spill ? { ...row, fitOverride: spill } : row;
       });
       // Generation models join the same list rather than living on a screen of

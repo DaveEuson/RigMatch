@@ -365,6 +365,34 @@ export function mixtureSpillFit(row: GradeRow, hardware: GradeHardware): Hardwar
 }
 
 /**
+ * The fit on shared memory (a Mac, a Jetson), where getHardwareFit's card
+ * rules do not hold: there is no system memory to spill into, so its "RAM
+ * assist" up to 1.15× is a model bigger than all the memory there is, and its
+ * "Good fit" up to 80% is past the share a model can have beside the system
+ * (UNIFIED_USABLE_SHARE). A 17.7 GB qwen3:30b on a 16 GB Mac was a C at
+ * "about 15 words a second". Applied as the row's fitOverride, like
+ * mixtureSpillFit, so the fit pill and the grade agree; null within the share.
+ */
+export function unifiedMemoryFit(row: GradeRow, hardware: GradeHardware): HardwareFit | null {
+  if (row.fitOverride || !row.sizeGb || !hardware.unifiedMemory || hardware.vramGb <= 0) return null;
+  if (row.sizeGb <= hardware.vramGb * UNIFIED_USABLE_SHARE) return null;
+  const memory = `${formatGb(hardware.vramGb)} of shared memory`;
+  return row.sizeGb > hardware.vramGb
+    ? {
+      tone: 'out-of-league',
+      label: `Too big · ${formatGb(row.sizeGb)}`,
+      detail: `Bigger than all of your ${memory}`,
+      recommend: false,
+    }
+    : {
+      tone: 'tight',
+      label: `Tight fit · ${formatGb(row.sizeGb)}`,
+      detail: `Needs more of your ${memory} than a model can have beside the system, so it will be slow`,
+      recommend: true,
+    };
+}
+
+/**
  * A picture or video model's fit, in words that match the Size column.
  *
  * Those models are sized by what they hold in graphics memory at once, which
