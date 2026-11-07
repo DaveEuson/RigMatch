@@ -23,6 +23,9 @@ import { RIG_REFERENCES, RIG_TIERS } from '../../src/lib/rigScore.ts';
  *    send, and fields for the model's /api/ps entry (size, size_vram,
  *    context_length). It may throw to answer with a 500. Absent, the fixed
  *    answer above is sent.
+ *  - onChat(body): answers /api/chat, for the pal check. Returns the reply to
+ *    send; may throw to answer with a 500. A chat loads the model as a
+ *    generate does. Absent, the reply is "ok".
  *
  * Not a test file (no .test.mjs), so run-tests does not collect it.
  */
@@ -38,6 +41,7 @@ export async function fakeOllama({
   stallModels = [],
   generateError = null,
   onGenerate = null,
+  onChat = null,
 } = {}) {
   const tierOf = (model) => RIG_TIERS.find((entry) => entry.model === model);
   const speedsFor = (model) => {
@@ -110,6 +114,19 @@ export async function fakeOllama({
         });
         return delayMs > 0 ? setTimeout(answer, delayMs) : answer();
       }
+      if (request.url === '/api/chat') {
+        if (generateError) return send({ error: generateError }, 500);
+        let reply = null;
+        if (onChat) {
+          try { reply = onChat(parsed); } catch (error) { return send({ error: String(error?.message ?? error) }, 500); }
+        }
+        state.loaded = [
+          ...state.loaded.filter((entry) => entry.name !== parsed.model),
+          { name: parsed.model, size: 100, size_vram: 100, expires_at: new Date(Date.now() + 110_000).toISOString() },
+        ];
+        if (stall || stallModels.includes(parsed.model)) { stalled.push(response); return undefined; }
+        return send(reply ?? { message: { role: 'assistant', content: 'ok' }, eval_count: 2, total_duration: 1.2e9, load_duration: 1e9, done: true });
+      }
       return send({ error: 'not found' }, 404);
     });
   });
@@ -127,6 +144,8 @@ export async function fakeOllama({
     /** The /api/generate requests that loaded a model, and those that unloaded one. */
     loads: () => calls.filter((call) => call.path === '/api/generate' && call.body?.keep_alive !== 0).map((call) => call.body.model),
     unloads: () => calls.filter((call) => call.path === '/api/generate' && call.body?.keep_alive === 0).map((call) => call.body.model),
+    /** The /api/chat requests, in order. */
+    chats: () => calls.filter((call) => call.path === '/api/chat').map((call) => call.body),
     /** A /api/generate request has arrived and is being held (stall). */
     waitForStall: async (timeoutMs = 10_000) => {
       const until = Date.now() + timeoutMs;

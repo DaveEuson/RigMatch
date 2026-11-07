@@ -14,7 +14,7 @@ import {
 import { formatDateTime, formatGb, formatThroughputValue } from '../lib/format';
 import { formatLocale } from '../lib/formatLocale';
 import { isEmbeddingModel } from '../lib/modelCatalog';
-import { rigScoreSession as session, useRigScoreSession } from '../lib/rigScoreLive';
+import { rigScoreBusy, rigScoreSession as session, useRigScoreSession } from '../lib/rigScoreLive';
 import type { OllamaModel } from '../types';
 import './ContextEndurance.css';
 
@@ -110,7 +110,7 @@ export function ContextEndurance({ models, ready, busy }: {
   const result = state.enduranceResults.find((entry) => entry.model === model?.name);
   const running = state.endurance;
   const message = model ? state.enduranceMessages[model.name] : undefined;
-  const canRun = ready && !busy && !running && !state.running && Boolean(model);
+  const canRun = ready && !busy && !rigScoreBusy(state) && Boolean(model);
   const cost = model ? describeEnduranceTime(estimateEnduranceSeconds({ sizeGb: model.sizeGb, estimateTps: null })) : null;
   const base = result?.stages[0];
 

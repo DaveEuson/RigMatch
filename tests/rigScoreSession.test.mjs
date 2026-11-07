@@ -110,7 +110,7 @@ test('App sees a running speed test, counts it as the card being busy, and shows
   }
   assert.match(app, /disabled=\{isBenchmarking \|\| isListTesting \|\| rigScoreRunning\}/);
   // The load strip names it from any screen, with a Stop.
-  assert.match(app, /\{rigSession\.endurance \? 'Running the context check' : 'Running the speed test'\}\n\s*<\/button>\n\s*<button type="button" className="running-stop" onClick=\{rigScoreSession\.stop\}>Stop<\/button>/);
+  assert.match(app, /\{rigSession\.endurance \? 'Running the context check' : rigSession\.pal \? 'Running the pal check' : 'Running the speed test'\}\n\s*<\/button>\n\s*<button type="button" className="running-stop" onClick=\{rigScoreSession\.stop\}>Stop<\/button>/);
 });
 
 test('progress from a run that is not this one is ignored', async () => {
