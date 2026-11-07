@@ -126,7 +126,7 @@ export function catalogRows(families: Record<string, SnapshotFamily> = snapshot.
         name: family, tag, inputs: size.inputs, badges: facts.badges, description: facts.description,
       }) ?? undefined;
       // "Latest" and "Unknown" are labels, not sizes; the grade reads the download instead.
-      const params = ollamaCatalog.inferParamsFromTag(tag);
+      const params = ollamaCatalog.inferParamsFromTag(tag, size.sizeGb);
       const row: CatalogRow = {
         name, displayName: name, params: /^\d/.test(params) ? params : '', sizeGb: toGiB(size.sizeGb ?? 0), capabilities,
         description: facts.description, ...(twin && twin[0] === tag ? { aliases: [`${family}:latest`] } : {}),

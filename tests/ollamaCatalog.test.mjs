@@ -107,6 +107,12 @@ test('inferParamsFromTag / inferParamsFromModelName', () => {
   assert.equal(inferParamsFromTag('16x17b'), '109B');
   assert.equal(inferParamsFromTag('4x3b'), '10B', 'an unlisted mixture: 80% of the product');
   assert.equal(inferParamsFromTag('weird'), 'Unknown');
+  // Given the download, a count it outweighs by more than 8 bytes a parameter is something else.
+  assert.equal(inferParamsFromTag('1m', 4.5), 'Unknown', 'internlm2:1m is a 7B with a 1M-token context');
+  assert.equal(inferParamsFromTag('7b', 4.5), '7B');
+  assert.equal(inferParamsFromTag('270m', 0.3), '270M');
+  assert.equal(inferParamsFromTag('30m', 0.1), '30M', 'a size rounded up to 0.1 GB is not held against a tiny model');
+  assert.equal(inferParamsFromTag('1b', 3.3), '1B', 'a full-precision 1B (granite4:1b) keeps its count');
 
   assert.equal(inferParamsFromModelName('qwen2.5:7b'), '7B');
   assert.equal(inferParamsFromModelName('nemotron-3-nano:30b'), '30B');
