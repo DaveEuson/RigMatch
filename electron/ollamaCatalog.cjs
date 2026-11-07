@@ -101,7 +101,13 @@ function catalogSizesInGiB(entries) {
  */
 const EXPERT_TAG_TOTALS = { '8x7b': '47B', '8x22b': '141B', '16x17b': '109B', '128x17b': '400B' };
 
-function inferParamsFromTag(tag) {
+/**
+ * The parameter count a tag names. Given the tag's download size (decimal GB),
+ * a count the download outweighs by more than 8 bytes a parameter, twice full
+ * precision, is not a parameter count: internlm2:1m is the 7B with a 1M-token
+ * context, 4.5 GB, and was graded as a 1M-parameter toy.
+ */
+function inferParamsFromTag(tag, sizeGb) {
   const experts = String(tag || '').toLowerCase().match(/^(\d+)x(\d+(?:\.\d+)?)b/);
   if (experts) {
     return EXPERT_TAG_TOTALS[`${experts[1]}x${experts[2]}b`]
@@ -109,6 +115,9 @@ function inferParamsFromTag(tag) {
   }
   const match = String(tag || '').match(/(\d+(?:\.\d+)?)(m|b)/i);
   if (!match) return tag === 'latest' ? 'Latest' : 'Unknown';
+  const billions = Number(match[1]) / (match[2].toLowerCase() === 'm' ? 1000 : 1);
+  // The listing rounds sizes to 0.1 GB, so a tiny model is given that much slack.
+  if (sizeGb > billions * 8 + 0.1) return 'Unknown';
   return `${match[1]}${match[2].toUpperCase()}`;
 }
 
@@ -246,12 +255,13 @@ function scanOllamaFamilyRows(name, source) {
       continue;
     }
 
+    const sizeGb = parseSizeToGb(detail);
     const row = {
       id: key,
       name,
       tag,
-      params: inferParamsFromTag(tag),
-      sizeGb: parseSizeToGb(detail),
+      params: inferParamsFromTag(tag, sizeGb),
+      sizeGb,
       pack: tag === 'latest' ? 'Live Latest' : 'Live Tag',
       source: 'Ollama library',
       live: true,

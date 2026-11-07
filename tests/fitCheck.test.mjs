@@ -45,6 +45,16 @@ test('the catalog is every downloadable chat size in the snapshot, once, sized i
   assert.ok(rows.every((row) => row.sizeGb > 0));
 });
 
+test('a tag that names a context length, not a size, is graded on its download', () => {
+  const rows = catalogRows();
+  assert.equal(rows.find((row) => row.name === 'internlm2:1m').params, '', 'the 1m is a 1M-token context, not 1M parameters');
+  const ranked = rankModels(rows, card);
+  const long = ranked.find((model) => model.row.name === 'internlm2:1m');
+  const plain = ranked.find((model) => model.row.name === 'internlm2:7b');
+  assert.deepEqual([long.grade.letter, long.grade.points], [plain.grade.letter, plain.grade.points], 'the same 7B weights grade the same');
+  assert.doesNotMatch(long.grade.summary, /tiny/);
+});
+
 test('ranking is by points, and an installed model is graded on what Ollama says about it', () => {
   const installed = [
     { name: 'qwen3.5:9b', sizeGb: 6.1, params: '9.0B' },
