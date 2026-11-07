@@ -14,8 +14,8 @@ import { createRigSession, rigScoreBusy, type RigSessionState } from './rigScore
 export const rigScoreSession = createRigSession(agentArcadeApi);
 export { rigScoreBusy };
 
-/** What a show or test started during a speed test or a context check says instead of starting. */
-export const RIG_SCORE_BUSY = 'The speed test or context check on My PC is using the graphics card. This can start when it finishes, or stop it there.';
+/** What a show or test started during a speed test or a check says instead of starting. */
+export const RIG_SCORE_BUSY = 'The speed test or a check on My PC is using the graphics card. This can start when it finishes, or stop it there.';
 
 export function useRigScoreSession(): RigSessionState {
   return useSyncExternalStore(rigScoreSession.subscribe, rigScoreSession.getState);

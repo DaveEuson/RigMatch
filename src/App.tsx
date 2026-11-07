@@ -5029,7 +5029,7 @@ function App() {
     <>
       <i className="running-dot" aria-hidden="true" />
       <button type="button" className="running-open" onClick={() => { if (uiMode === 'advanced') { selectNav('lan'); setMyPcView('speed'); } }}>
-        {rigSession.endurance ? 'Running the context check' : 'Running the speed test'}
+        {rigSession.endurance ? 'Running the context check' : rigSession.pal ? 'Running the pal check' : 'Running the speed test'}
       </button>
       <button type="button" className="running-stop" onClick={rigScoreSession.stop}>Stop</button>
     </>
