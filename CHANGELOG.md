@@ -14,6 +14,7 @@ _Beta build_
 - The Fit grade now also spots a download squeezed below 4 bits from its size when its name doesn't say, so Bonsai 2's downloads say so before you download them.
 - internlm2:1m, a 7B model that reads a million tokens of context, no longer gets a D for being "tiny". Its tag names the context length, not the size.
 - rigmatch-fit no longer grades Ollama's cloud models as if they ran on your PC, and reads OLLAMA_HOST=:11434 as this computer, as Ollama does. Its LM Studio Top Match line gives the same download command as the table, and rigmatch-fit help points to --help.
+- RigMatch's list of what each Ollama model can do is refreshed for 273 families. autotrust-jev is a decision model, so it stays out of chat picks like the other decision models.
 
 ## 0.11.0 — Fairer Scores
 _Beta build_
