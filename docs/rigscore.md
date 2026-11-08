@@ -23,15 +23,13 @@ GPU, VRAM, driver, Ollama version, app version, the digest and quantization of t
 
 ## Where other computers' numbers come from
 
-Opt-in, one result at a time, no server at first:
+Changed 2026-11-07. Dave set 1.0 to wait for a shared rating that is anonymous. A prefilled GitHub issue shows the sender's account, so results now go to the scoreboard (`scoreboard/`), a Cloudflare Worker on the free plan with a D1 database:
 
-1. A "Submit my result" button opens a prefilled GitHub issue holding the score and the rig stamp, the same pattern as the feedback link. Nothing is sent from the app, and nothing leaves until the person presses Submit on GitHub.
-2. Accepted results are merged by hand into a table in the repo.
-3. A leaderboard page on the site is built from that table.
+1. A Share button on one result sends it (`src/lib/rigScoreSubmit.ts`): the rig stamp and the speeds, and a random id so a resend counts once. It's opt-in, one result at a time, never automatic. **Not built yet.**
+2. The Worker checks every field against the test's own definition and keeps only the known fields. It refuses a run that spilled out of the graphics card, one something else disturbed, and the browser preview's samples.
+3. `GET /v1/cards` serves a tier's board: per card, the result count, median speeds and points. Only results on the reference's own model file are ranked.
 
-This holds to a few hundred entries and costs nothing. A server is the step after, if it is ever needed, and it needs a privacy policy first.
-
-The submission carries the rig stamp and the scores only: no host name, prompts, transcripts or file paths.
+The submission carries no host name, account, prompts, transcripts, file paths or time of day. The sender's address isn't stored. `scoreboard/PRIVACY.md` is the privacy policy this section once said a server would need, and `scoreboard/README.md` has the setup steps.
 
 ## Phases
 
@@ -39,7 +37,7 @@ The submission carries the rig stamp and the scores only: no host name, prompts,
 2. **Runner** (done): `electron/rigScoreRunner.cjs` behind the `rigscore:run` IPC. It runs the fixed workload on the local Ollama and returns the per-run timings and the machine's stamp; `src/lib/rigScoreRun.ts` turns them into a `TierMeasure` and a `RigStamp`. It never pulls: a missing model comes back as not installed, and the screen offers the download through the usual consent dialog, with its size. It frees what RigMatch itself loaded (Labs, its chat) and, for anything another program loaded (the tier's own model included), does not start and says so. A model that comes to share the card during the test means nothing is kept. While it runs, App counts the card as busy, so no show, Labs test or RigMatch Chat request starts beside it.
 3. **Reference** (Light, Standard and Heavy done, 2026-10-24): measure the reference machine for each tier and write the numbers into `RIG_REFERENCES`. Heavy sat wholly on the 12 GB card, with under 1 GiB to spare. Extreme is pending: it needs a 24 GB card, which the reference machine does not have.
 4. **Screen** (done, card to follow): My PC › Speed score in Advanced Mode, with the tiers, the stamp, a plain-English speed scale and the history. The shareable card is still to do.
-5. **Submit and compare**: the GitHub submission, the table, the leaderboard page.
+5. **Submit and compare**: the scoreboard Worker and its checks (built, not yet deployed), then the app's Share button, the board on the site and, perhaps, real speeds from other people's cards beside the estimates in the app.
 
 ## Open
 
