@@ -262,7 +262,8 @@ test('the terminal lists a decision model under --all with no grade, and never a
 
 test('the shipped snapshot: every decision family and phonon is kept out of the chat lists', () => {
   // pplx-decider-flash arrived in the 0.11.0 snapshot: Ollama's "decision" badge, "a 4B decision model from Perplexity".
-  const decision = ['d1', 'd1-omni', 'd3', 'kev', 'nimble', 'nimble-v3', 'tev1', 'strands-decider', 'clef', 'clef-flash', 'pplx-decider', 'pplx-decider-flash', 'laya'];
+  // autotrust-jev arrived in the 0.11.1 snapshot: the "decision" badge, and "decision models return choices, yes/no probabilities, and ratings".
+  const decision = ['d1', 'd1-omni', 'd3', 'kev', 'nimble', 'nimble-v3', 'tev1', 'strands-decider', 'clef', 'clef-flash', 'pplx-decider', 'pplx-decider-flash', 'laya', 'autotrust-jev'];
   const rows = catalogRows(shipped.families);
   const ranked = rankModels(rows, vram12);
   assert.ok(ranked.length > 300);

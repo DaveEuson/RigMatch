@@ -11,10 +11,10 @@
 
 Publish from the release tag, not from `main`: `main` may already hold work for the next release, and the npm package should be exactly the code the release was built from.
 
-Run these in PowerShell, one at a time, with the tag of the release you just published (`v0.11.0-beta` below):
+Run these in PowerShell, one at a time, with the tag of the release you just published (`v0.11.1-beta` below):
 
 ```bash
-git clone --branch v0.11.0-beta --depth 1 https://github.com/DaveEuson/RigMatch.git C:\Users\davee\rigmatch-publish
+git clone --branch v0.11.1-beta --depth 1 https://github.com/DaveEuson/RigMatch.git C:\Users\davee\rigmatch-publish
 ```
 
 ```bash

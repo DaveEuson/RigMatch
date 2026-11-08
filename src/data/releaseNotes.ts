@@ -3,6 +3,21 @@ import type { ReleaseNoteEntry } from '../components/UpdateCenter';
 
 export const releaseNotes: ReleaseNoteEntry[] = [
   {
+    version: '0.11.1',
+    label: 'Sizes That Add Up',
+    date: 'Beta build',
+    notes: [
+      'Download sizes now match what a model takes up once it\'s installed. ollama.com counts in decimal GB, which made every download look about 7% bigger, so a few models that fit your graphics card were marked as too big. The Models list, its "Start here" picks and the Speed score now give the same size, and 13 sizes in the list RigMatch uses when it can\'t reach ollama.com were out of date and are corrected.',
+      'On a Mac or a Jetson, a model bigger than all of the memory is now graded F, "Too big", instead of C, "RAM assist". The graphics share that memory, so there is nothing for the model to spill into.',
+      'Context endurance and the Speed score no longer give up after five minutes with "Cannot reach local AI service" on a slow PC while Ollama is still loading the model.',
+      'Context endurance keeps a model\'s last sound reading when a new check can\'t reach a verdict. It no longer offers embedding models, which Ollama refused with an error, and no longer says gpt-oss lost the passkey when it gave the passkey while thinking.',
+      'The Fit grade now also spots a download squeezed below 4 bits from its size when its name doesn\'t say, so Bonsai 2\'s downloads say so before you download them.',
+      'internlm2:1m, a 7B model that reads a million tokens of context, no longer gets a D for being "tiny". Its tag names the context length, not the size.',
+      'rigmatch-fit no longer grades Ollama\'s cloud models as if they ran on your PC, and reads OLLAMA_HOST=:11434 as this computer, as Ollama does. Its LM Studio Top Match line gives the same download command as the table, and rigmatch-fit help points to --help.',
+      'RigMatch\'s list of what each Ollama model can do is refreshed for 273 families. autotrust-jev is a decision model, so it stays out of chat picks like the other decision models.',
+    ],
+  },
+  {
     version: '0.11.0',
     label: 'Fairer Scores',
     date: 'Beta build',
