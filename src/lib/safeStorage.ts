@@ -129,8 +129,12 @@ export function historySaveNote(written: number): string | null {
   if (written < 0) {
     return 'RigMatch could not save your scores: there is no storage space left for them. They stay until RigMatch closes. Clearing old scores or chats in Settings makes room.';
   }
-  if (written >= 3) return 'Saved scores, but there was not enough browser storage left for the answer transcripts.';
-  if (written > 0) return 'Storage is nearly full, so some saved answer text was dropped. Scores were kept.';
+  // The rungs App writes: 1 drops the in-app chats, 2 also the answer text, 3
+  // every answer. Rung 1 used to say answer text was dropped when it was the
+  // chats that went.
+  if (written >= 3) return 'Saved scores, but there was not enough browser storage left for the answer transcripts or the in-app chats.';
+  if (written === 2) return 'Storage is nearly full, so the in-app chats and the saved answer text were dropped. Scores were kept.';
+  if (written === 1) return 'Storage is nearly full, so the in-app chats were not saved. Scores and answers were kept.';
   return null;
 }
 

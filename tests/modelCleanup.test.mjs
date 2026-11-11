@@ -94,6 +94,19 @@ test('the sweep keeps the Top Match on screen, not the top raw score', () => {
   assert.equal(keep(rows, scores, new Set(['fits:7b'])), 'next:7b', 'a cleared Top Match is not kept');
 });
 
+test('a score measured on another computer, or another card, is not the Top Match here', () => {
+  // The grades and crowns already left these out; Top Match ranked them.
+  const rows = [row('far:7b'), row('swapped:7b'), row('here:7b')];
+  const scores = {
+    'far:7b': { ...score('far:7b', 95), rig: { host: 'office-pc', gpu: 'RTX 4090', vramGb: 24 } },
+    'swapped:7b': { ...score('swapped:7b', 90), rig: { gpu: 'RTX 3060', vramGb: 12 } },
+    'here:7b': { ...score('here:7b', 70), rig: { gpu: 'RTX 4070', vramGb: 8 } },
+  };
+  assert.equal(getRigPick(rows, scores, VRAM, undefined, 'RTX 4070')?.row.displayName, 'here:7b');
+  // The sweep keeps what the screen shows.
+  assert.equal(topPickToKeep(rows, scores, VRAM, undefined, 'RTX 4070'), 'here:7b');
+});
+
 test('a top scorer that was already deleted does not make the sweep delete everything', () => {
   const rows = [row('gone:7b', { installed: false }), row('a:7b'), row('b:7b')];
   const scores = { 'gone:7b': score('gone:7b', 99), 'a:7b': score('a:7b', 75) };
@@ -112,5 +125,7 @@ test('"Everything, including X" is offered only when X is one of the models dele
   assert.ok(dialogs.includes('const topPickDeletable = Boolean(topPickName && installedRows.some((row) => row.displayName === topPickName));'));
   assert.ok(dialogs.includes('{topPickDeletable && topPickName && ('));
   const app = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf-8');
-  assert.ok(app.includes('topPickToKeep(modelRows, modelScores, system.gpu.vramGb, clearedTopMatches)'));
+  assert.ok(app.includes('topPickToKeep(modelRows, modelScores, system.gpu.vramGb, clearedTopMatches, system.gpu.model)'));
+  assert.ok(app.includes('getRigPick(modelRows, modelScores, system.gpu.vramGb, clearedTopMatches, system.gpu.model)'),
+    'the screen and the sweep pick the Top Match the same way');
 });

@@ -2,6 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { recipeForFile } from '../src/lib/pictureRecipes.ts';
+import { getHardwareFit } from '../src/lib/modelCatalog.ts';
 
 import {
   GENERATION_MODELS,
@@ -127,9 +128,9 @@ test('files RigMatch did not put there are simply not ours', () => {
   assert.ok(!isCatalogFile('someones-own-merge.safetensors'));
 });
 
-test('sizes read as gigabytes a person can weigh', () => {
-  assert.equal(formatBytesGb(2132696762), '2.13 GB');
-  assert.equal(formatBytesGb(6338544128), '6.34 GB');
+test('sizes read as gigabytes a person can weigh, binary like the Ollama sizes beside them', () => {
+  assert.equal(formatBytesGb(2132696762), '1.99 GB');
+  assert.equal(formatBytesGb(6338544128), '5.90 GB');
 });
 
 test('the proven entries are the ones actually run on this machine', () => {
@@ -207,9 +208,14 @@ test('a row’s size is what the download costs: every file it needs, and none i
   // without, so the size on the Download button was a fraction of the download.
   const wan = (installed) => generationCatalogRows(installed).find((r) => r.generationId === 'wan-2.1-1.3b');
   const bytes = (...ids) => ids.map(generationModelById).reduce((sum, m) => sum + m.bytes, 0);
-  assert.equal(wan({}).sizeGb, Number((bytes('wan-2.1-1.3b', 'umt5-fp8', 'vae-wan21') / 1e9).toFixed(2)));
+  assert.equal(wan({}).sizeGb, Number((bytes('wan-2.1-1.3b', 'umt5-fp8', 'vae-wan21') / 2 ** 30).toFixed(2)));
   assert.equal(
     wan({ text_encoders: ['umt5_xxl_fp8_e4m3fn_scaled.safetensors'] }).sizeGb,
-    Number((bytes('wan-2.1-1.3b', 'vae-wan21') / 1e9).toFixed(2)),
+    Number((bytes('wan-2.1-1.3b', 'vae-wan21') / 2 ** 30).toFixed(2)),
   );
+  // Sized in decimal GB against a card read in binary, SDXL Turbo (6.94 GB
+  // decimal, 6.46 binary) was "Too big" for a 6 GB card that runs it.
+  const sdxl = generationCatalogRows({}).find((r) => r.generationId === 'sdxl-turbo');
+  assert.equal(sdxl.sizeGb, 6.46);
+  assert.notEqual(getHardwareFit(sdxl, 6).tone, 'out-of-league');
 });

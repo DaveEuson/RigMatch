@@ -62,6 +62,12 @@ export type EnduranceRunRequest = {
   model: string;
   stages: Array<Pick<EnduranceStageDef, 'id' | 'numCtx' | 'targetTokens'>>;
   numPredict: number;
+  /**
+   * Stop with "freed", before anything loads, if RigMatch's own models (Labs,
+   * its chat) had to be freed first: the app read the card with them on it, and
+   * reads it again without them before the check itself.
+   */
+  stopIfFreed?: boolean;
 };
 
 export function enduranceRequest(model: string, progressId: string): EnduranceRunRequest {
@@ -119,6 +125,8 @@ export type EnduranceRunReply =
   | { status: 'busy'; loadedModels: string[] }
   /** Something came to share the card while the check ran, so nothing was kept. */
   | { status: 'shared'; loadedModels: string[]; sameModel?: boolean; /** Ollama unloaded the model mid-check, to make room for another program's. */ evicted?: boolean }
+  /** Asked to (stopIfFreed): RigMatch's own models were freed from the card, and nothing was loaded. */
+  | { status: 'freed'; loadedModels: string[] }
   | { status: 'stopped' }
   | { status: 'failed'; error: string };
 
@@ -312,7 +320,11 @@ export function enduranceVerdict(stages: readonly EnduranceStage[]): EnduranceVe
   const last = checked[checked.length - 1];
   const left = stages.filter((stage) => !checked.includes(stage));
   const lastKept = last !== base && last.writingTps ? last.writingTps / base.writingTps : null;
-  const lowestShare = Math.min(...checked.map((stage) => stage.gpuShare ?? 1));
+  // A stage Ollama gave no share for (its list of loaded models did not answer,
+  // or had no size) says nothing about where the model sat, so the sentence is
+  // said only when every size was read.
+  const shares = checked.map((stage) => stage.gpuShare);
+  const lowestShare = shares.every((share): share is number => share !== null) ? Math.min(...shares) : null;
   return {
     kind: 'holds',
     problemStage: null,
@@ -320,7 +332,8 @@ export function enduranceVerdict(stages: readonly EnduranceStage[]): EnduranceVe
     headline: `Holds up to ${contextLabel(last.numCtx)} on your card${left.length ? `, ${listNames(left.map((stage) => contextLabel(stage.numCtx)))} not checked` : ''}`,
     detail: [
       lastKept === null ? null : `At ${contextLabel(last.numCtx)} it writes at ${tpsText(last.writingTps ?? 0)} tok/s, ${percent(lastKept)} of its ${contextLabel(base.numCtx)} speed.`,
-      lowestShare >= 0.99 ? 'The whole model stays on the graphics card.' : `At least ${percent(lowestShare)} of the model stays on the graphics card.`,
+      lowestShare === null ? null
+        : lowestShare >= 0.99 ? 'The whole model stays on the graphics card.' : `At least ${percent(lowestShare)} of the model stays on the graphics card.`,
       checked.length > 1 ? 'The passkey hidden in the prompt came back at every size.' : 'The passkey hidden in the prompt came back.',
     ].filter(Boolean).join(' '),
     notes,
@@ -404,6 +417,8 @@ function failureFor(model: string, reply: Exclude<EnduranceRunReply, { status: '
         message: `Not saved: ${listNames(who)} came to share the graphics card while the check ran, so the numbers would be low. Run again when nothing else is using Ollama.`,
       };
     }
+    case 'freed':
+      return { kind: 'failed', message: 'The check did not start: RigMatch freed its own models from the graphics card first. Run it again.' };
     case 'stopped':
       return { kind: 'stopped', message: 'Stopped. Nothing was saved for this check.' };
     case 'failed':

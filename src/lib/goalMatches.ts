@@ -15,7 +15,7 @@
 
 import type { TestedModelScore } from '../types.ts';
 import { goalById, type Goal, type GoalId } from './goals.ts';
-import { isLegacyScore } from './scoring.ts';
+import { compareTestedModelScores, isLegacyScore } from './scoring.ts';
 import { isCloudModel } from './modelCatalog.ts';
 import { bestModelForTask, needsJudge, type TaskGroupId } from './taskScores.ts';
 
@@ -59,9 +59,11 @@ export function getGoalMatches(
   /** Same contract as getTaskTopPicks: true = drifted, must not crown. */
   isDrifted?: (score: TestedModelScore) => boolean,
 ): GoalMatch[] {
+  // In Match order, so a tie on a task score goes to the better Match
+  // (bestModelForTask), not to whichever model was saved first.
   const eligible = Object.values(modelScores).filter(
     (s) => !isCloudModel(s.model) && !isLegacyScore(s) && !(isDrifted?.(s) ?? false),
-  );
+  ).sort(compareTestedModelScores);
   const byModel = Object.fromEntries(eligible.map((s) => [s.model, s.taskScores]));
   const models = eligible.map((s) => s.model);
 

@@ -16,7 +16,7 @@
  */
 
 import { isPictureCheckpoint } from './checkpointKinds.ts';
-import { GENERATION_MODELS, type ComfyFolderListing, type GenerationModel } from './generationCatalog.ts';
+import { GENERATION_MODELS, bytesToGb, type ComfyFolderListing, type GenerationModel } from './generationCatalog.ts';
 
 export type PictureRecipe = {
   /** The generation catalog id of the model file; its `requires` name the encoder and decoder. */
@@ -113,5 +113,5 @@ export function recipeFootprintGb(modelId: string): number | null {
   if (!model || !PICTURE_RECIPES.some((r) => r.id === modelId)) return null;
   const { clip, vae } = parts(model);
   if (!clip || !vae) return null;
-  return Number((Math.max(model.bytes + vae.bytes, clip.bytes) / 1e9).toFixed(2));
+  return Number(bytesToGb(Math.max(model.bytes + vae.bytes, clip.bytes)).toFixed(2));
 }

@@ -41,6 +41,33 @@ test('an answer only the PC broke can be asked again', () => {
   assert.equal(canRetest(null), false);
 });
 
+test('an answer saved without its question, when storage ran low, cannot be asked again', async () => {
+  // The history save's storage-full rung keeps timedOut and countedRuns and empties the text.
+  const { dropTranscripts } = await import('../src/lib/safeStorage.ts');
+  const [trimmed] = dropTranscripts({ benchmarkByModel: { 'qwen3:8b': { prompts: [timedOutDrawing] } } }).benchmarkByModel['qwen3:8b'].prompts;
+  assert.equal(trimmed.timedOut, true);
+  assert.equal(trimmed.countedRuns, 0);
+  assert.equal(canRetest(trimmed), false, 'an empty question would be asked as the whole default test');
+  assert.equal(canRetest({ ...timedOutDrawing, prompt: '   ' }), false);
+  assert.equal(canRetest(timedOutDrawing), true);
+});
+
+test('the main process refuses a retest with no question text, and never asks the default set in its place', async () => {
+  const { readFileSync } = await import('node:fs');
+  const main = readFileSync(new URL('../electron/main.cjs', import.meta.url), 'utf-8').replace(/\r\n/g, '\n');
+  const between = (from, to) => main.slice(main.indexOf(from), main.indexOf(to, main.indexOf(from)));
+  const retest = between('async function retestBenchmarkPrompt(', '\n}\n');
+  const refused = retest.indexOf("if (!String(firstTry.prompt ?? '').trim()) {");
+  assert.ok(refused > 0, 'the saved question is checked');
+  assert.ok(refused < retest.indexOf('await runBenchmark('), 'before anything runs');
+  assert.match(retest.slice(refused), /^[^\n]*\n\s*throw new Error\('[^']*storage was nearly full/);
+  // And the run itself, which a retest request can reach without going through the check above.
+  const inner = between('async function runBenchmarkInner(', 'const progressId = ');
+  const guard = inner.indexOf("if (request.retestPrompt && !String(request.retestPrompt.prompt ?? '').trim()) {");
+  assert.ok(guard > 0 && guard < inner.indexOf('normalizeBenchmarkQuestions([request.retestPrompt])'), 'refused before the question is turned into a plan');
+  assert.match(inner.slice(guard), /^[^\n]*\n\s*throw new Error\(/);
+});
+
 test('a retested answer is scored back in exactly as a clean run would be', () => {
   const fit = 100;
   const others = [answer('q1'), answer('q2', { tokensPerSecond: 60, sobrietyScore: 90 }), answer('q3', { stableRuns: 2 })];

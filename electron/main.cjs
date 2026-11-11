@@ -33,7 +33,7 @@ const {
 } = require('./benchmarkScoring.cjs');
 const { scoreQualityWithJudge } = require('./judgeScoring.cjs');
 const { DRAWING_ANSWER_TOKENS, DRAWING_TIMEOUT_MS, checkDrawing, drawingTimedOut, drawingJudgeMode, drawingNote } = require('./drawingRound.cjs');
-const { runRigTier, unloadOllamaModel } = require('./rigScoreRunner.cjs');
+const { noteStillReleasing, runRigTier, unloadOllamaModel } = require('./rigScoreRunner.cjs');
 const { runEndurance } = require('./enduranceRunner.cjs');
 const { fitFromPc, loadedFootprint } = require('./matchFit.cjs');
 const { localRequest } = require('./localHttp.cjs');
@@ -196,8 +196,11 @@ const BENCHMARK_REPEATS = 3; // median of 3 timed runs per prompt for a steadier
 const BENCHMARK_TIMEOUT_MS = 120000;
 const BENCHMARK_KEEP_ALIVE = '10m';
 // Measured: an unload request returns in ~107ms but the card is not free until
-// ~485ms. 3s leaves generous headroom for a larger model on a slower card.
-const UNLOAD_SETTLE_TIMEOUT_MS = 3000;
+// ~485ms. A big model on a slow card took longer than 3s, and the next speed
+// test tier then found it still loaded and blamed another program, so this
+// waits up to 15s, as the command line does (cli/measure.ts). It stops waiting
+// as soon as the card is free.
+const UNLOAD_SETTLE_TIMEOUT_MS = 15000;
 const BENCHMARK_GENERATE_OPTIONS = Object.freeze({
   temperature: 0,
   seed: 1,
@@ -294,7 +297,9 @@ const curatedCatalog = [
   catalogEntry('phi4', 'latest', 9.1, '14B', 'Quality'),
   catalogEntry('phi4-mini', 'latest', 2.5, '3.8B', 'Lightweight'),
   catalogEntry('phi3.5', 'latest', 2.2, '3.8B', 'Balanced'),
-  catalogEntry('phi3', 'mini', 2.3, '3.8B', 'Balanced'),
+  // ollama.com lists mini only under 3.8b (2.2 GB), so the snapshot never
+  // corrects this one; 2.3 made the list say 2.1 GB beside a 2.0 "Start here".
+  catalogEntry('phi3', 'mini', 2.2, '3.8B', 'Balanced'),
   catalogEntry('phi3', 'medium', 7.9, '14B', 'Quality'),
   catalogEntry('deepseek-r1', '1.5b', 1.1, '1.5B', 'Reasoning'),
   catalogEntry('deepseek-r1', '7b', 4.7, '7B', 'Reasoning'),
@@ -3476,6 +3481,9 @@ async function unloadBenchmarkModel(baseUrl, model) {
     // keep_alive 0, then wait for /api/ps to show the card free
     // (unloadOllamaModel, shared with the command-line speed test).
     if (await unloadOllamaModel({ fetchJson, baseUrl, model, settleMs: UNLOAD_SETTLE_TIMEOUT_MS })) return;
+    // Still listed: the next speed test or context check waits for it, rather
+    // than taking RigMatch's own model for another program's.
+    noteStillReleasing(baseUrl, model);
     await appendAppLog({
       level: 'warn',
       source: 'benchmark',
@@ -3668,6 +3676,12 @@ async function retestBenchmarkPrompt(request = {}, sender) {
   const promptId = String(request?.promptId ?? '');
   const firstTry = Array.isArray(previous?.prompts) ? previous.prompts.find((prompt) => prompt?.id === promptId) : null;
   if (!firstTry) throw new Error('That answer is not part of this test.');
+  // A history saved when storage was nearly full keeps the scores but not the
+  // question's text (dropTranscripts in safeStorage.ts), and an empty question
+  // would be asked as the whole default test.
+  if (!String(firstTry.prompt ?? '').trim()) {
+    throw new Error('This question cannot be asked again: storage was nearly full when the test was saved, so its text was not kept. Test the model again instead.');
+  }
   if (!canRetest(firstTry)) {
     throw new Error('Only an answer the PC broke can be asked again. At temperature 0 a model gives the same answer each time, so anything else would come back unchanged.');
   }
@@ -3700,6 +3714,12 @@ async function runBenchmarkInner(request = {}, sender, signal) {
   const providerLabel = getLocalProviderLabel(provider);
   const questionCount = normalizeBenchmarkQuestionCount(request.questionCount);
   // A retest asks one saved question again, under its saved id (benchmarkRetest.cjs).
+  // Never the default set in its place, which normalizeBenchmarkQuestions gives
+  // for a question with no text: the model would sit a whole test, and its first
+  // answer would be taken for the retested one.
+  if (request.retestPrompt && !String(request.retestPrompt.prompt ?? '').trim()) {
+    throw new Error('This question cannot be asked again: its text was not kept.');
+  }
   const benchmarkPrompts = request.retestPrompt
     ? normalizeBenchmarkQuestions([request.retestPrompt]).map((prompt) => ({ ...prompt, id: String(request.retestPrompt.id) }))
     : buildBenchmarkPromptPlan(questionCount, request.questions);

@@ -65,6 +65,35 @@ test('a context check names the card it ran on, keeps the result for that model,
   assert.deepEqual(made.getState().enduranceResults.map((result) => result.model).sort(), ['llama3.2:3b', 'qwen3:14b'], 'one per model');
 });
 
+test("the card is read again once the check has freed RigMatch's own models, so their memory is not called another program's", async () => {
+  // A 5.6 GB chat model RigMatch left loaded on a 12 GB card makes the first reading heavy.
+  const withChat = { level: 'heavy', reasons: ['67% of its memory is already in use'], apps: [], vramUsedPercent: 67, utilizationPercent: 12, message: 'Before starting: 67% of its memory is already in use.', source: 'nvidia-smi' };
+  const readings = [withChat, cardReading];
+  const fake = bridge((request) => (request.stopIfFreed ? { status: 'freed', loadedModels: ['qwen3.5:9b'] } : done), { contention: async () => readings.shift() });
+  const { made } = session(fake);
+  await made.checkContext('qwen3:14b');
+  const [result] = made.getState().enduranceResults;
+  assert.deepEqual(result.baseline, baseline, 'the reading taken after RigMatch freed its own models');
+  assert.deepEqual(result.verdict.notes, [], 'no "busy before the check" for memory RigMatch itself held');
+  assert.deepEqual(fake.asked.map((request) => request.stopIfFreed), [true, undefined], 'asked once to stop if it freed any, then run');
+  assert.equal(new Set(fake.asked.map((request) => request.progressId)).size, 1, 'one check, so Stop names both');
+
+  // Nothing of RigMatch's to free: one reading, one run.
+  const quiet = bridge(done);
+  await session(quiet).made.checkContext('qwen3:14b');
+  assert.equal(quiet.asked.length, 1);
+
+  // Stop pressed while the card is read again: nothing more is run.
+  let stopIt;
+  const stopping = bridge(() => ({ status: 'freed', loadedModels: ['qwen3.5:9b'] }), { contention: async () => { stopIt?.(); return cardReading; } });
+  const second = session(stopping);
+  const checking = second.made.checkContext('qwen3:14b');
+  stopIt = () => second.made.stop();
+  await checking;
+  assert.equal(stopping.asked.length, 1);
+  assert.match(second.made.getState().enduranceMessages['qwen3:14b'], /Stopped\. Nothing was saved for this check\./);
+});
+
 test('a check that could not conclude does not replace a sound reading of the same model', async () => {
   const wrongSize = { ...done, stages: done.stages.map((stage, index) => (index === 0 ? { ...stage, promptTokens: 666, sizeOk: false } : stage)) };
   const first = session(bridge(done));

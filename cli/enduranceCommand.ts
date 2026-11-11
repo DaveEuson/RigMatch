@@ -7,6 +7,7 @@
  * the tests run it against a stand-in Ollama and a fake interrupt.
  */
 import security from '../electron/security.cjs';
+import { isEmbeddingModel } from '../src/lib/modelCatalog.ts';
 import { catalogRows, rankModels } from './fitCheck.ts';
 import {
   baselineOf, formatEnduranceDone, formatEnduranceIntro, formatEnduranceProgress, formatEnduranceReport, measureEndurance, runEnduranceRequest, toEnduranceJson,
@@ -15,6 +16,7 @@ import { CLOUD_TAG, UNLOAD_SETTLE_MS, checkCard, isCloudModel, type CardNote, ty
 import { assertLocalOllama, liveOutput, stopOnInterrupt, type MeasureEnv } from './measureCommand.ts';
 
 const cloudMessage = (model: string) => `${model} runs on Ollama's servers, not on this computer, so there is nothing of this PC to check, and the prompts would leave it. rigmatch-fit --endurance runs local models only.`;
+const embeddingMessage = (model: string) => `${model} is an embedding model: it turns text into numbers for search and writes no text, so there is nothing for the check to time. rigmatch-fit --endurance checks models that write text.`;
 
 /**
  * --endurance <model>: the context check. Refuses while another program has a
@@ -27,6 +29,8 @@ export async function runEnduranceCommand({ model, json }: { model: string; json
   try { security.assertValidModelName(model); } catch { throw new Error(`"${model}" is not a model name Ollama uses, such as qwen3:8b.`); }
   // Before anything is asked of Ollama: a cloud model is refused whether or not it is installed.
   if (CLOUD_TAG.test(model)) throw new Error(cloudMessage(model));
+  // So is an embedding model, by name as the app's Speed score screen leaves it out: Ollama refuses the check's prompts.
+  if (isEmbeddingModel(model)) throw new Error(embeddingMessage(model));
 
   const installed = await env.installedModels(baseUrl);
   if (installed === null) throw new Error(`Ollama did not answer at ${baseUrl}. --endurance runs the model on it, so start Ollama and try again.`);

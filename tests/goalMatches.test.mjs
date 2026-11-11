@@ -36,6 +36,14 @@ test('the tools goal crowns from its own json group, not instructions', () => {
   assert.equal(match.pick.taskScore, 90);
 });
 
+test('a tie on the task goes to the better Match, whatever order the scores were saved in', () => {
+  // Four valid JSON answers score exactly 92 for any model, so tools ties are common.
+  const first = score('first', { tools: t(92) }, { total: 80, preciseTotal: 80 });
+  const better = score('better', { tools: t(92) }, { total: 88, preciseTotal: 88 });
+  assert.equal(getGoalMatches(['use-tools'], { first, better })[0].pick.model, 'better');
+  assert.equal(getGoalMatches(['use-tools'], { better, first })[0].pick.model, 'better');
+});
+
 test('a drifted score cannot wear a goal crown', () => {
   const scores = { 'a': score('a', { coding: t(95) }) };
   const [withDrift] = getGoalMatches(['code'], scores, () => true);

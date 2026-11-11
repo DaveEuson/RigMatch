@@ -33,6 +33,37 @@ test('only an answer the PC broke offers "Test this question again"', () => {
   assert.doesNotMatch(cutOff.text, /temperature 0/);
 });
 
+test('an answer whose question was dropped when storage ran low offers no retest, and says why', async () => {
+  const { dropTranscripts } = await import('../src/lib/safeStorage.ts');
+  const timedOut = answer({ type: 'drawing', doneReason: 'timeout', status: 'no-response', timedOut: true, countedRuns: 0, stableRuns: 0 });
+  const [trimmed] = dropTranscripts({ benchmarkByModel: { m: { prompts: [timedOut] } } }).benchmarkByModel.m.prompts;
+  const note = answerNote(trimmed);
+  assert.equal(note.retestable, false);
+  assert.match(note.text, /Ran out of time, so it is left out of the score\./);
+  assert.match(note.text, /storage/);
+  // Asked again, out of time again, and then trimmed: no button either.
+  const again = { ...trimmed, retest: { at: '2026-11-03T20:00:00.000Z', firstTry: { status: 'no-response', doneReason: 'timeout', timedOut: true } } };
+  assert.equal(answerNote(again).retestable, false);
+});
+
+test('the button is offered exactly when the main process would ask the question again', async () => {
+  const { createRequire } = await import('node:module');
+  const { canRetest } = createRequire(import.meta.url)('../electron/benchmarkRetest.cjs');
+  const timedOut = { type: 'drawing', doneReason: 'timeout', status: 'no-response', timedOut: true, countedRuns: 0, stableRuns: 0 };
+  const cases = [
+    answer(timedOut),
+    answer({ ...timedOut, prompt: '' }),
+    answer({ ...timedOut, timedOut: undefined }),
+    { ...answer(timedOut), countedRuns: undefined },
+    answer({ doneReason: 'length', status: 'truncated', stableRuns: 0 }),
+    answer({ retriedAfter: 'timed out' }),
+    answer(),
+    answer({ ...timedOut, retest: { at: '2026-11-03T20:00:00.000Z', firstTry: { status: 'no-response', doneReason: 'timeout', timedOut: true } } }),
+    answer({ ...timedOut, prompt: '', retest: { at: '2026-11-03T20:00:00.000Z', firstTry: { status: 'no-response', doneReason: 'timeout', timedOut: true } } }),
+  ];
+  for (const prompt of cases) assert.equal(answerNote(prompt)?.retestable ?? false, canRetest(prompt), JSON.stringify(prompt));
+});
+
 test('a test saved before 0.11.0 says why it cannot be asked again', () => {
   const old = answerNote({ ...answer({ doneReason: 'timeout', status: 'no-response', timedOut: true }), countedRuns: undefined });
   assert.equal(old.retestable, false);

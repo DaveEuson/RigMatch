@@ -760,9 +760,19 @@ export function generationFileLabel(file: string): string {
   return GENERATION_MODELS.find((model) => model.filename.toLowerCase() === bare)?.label ?? file;
 }
 
+/**
+ * Bytes as the app's GB: binary, the unit Ollama's sizes are shown in since
+ * 0.11.1 and the unit graphics memory is read in. In decimal GB these models
+ * read 7% bigger than the Ollama ones beside them, and SDXL Turbo was "Too
+ * big" for a 6 GB card it fits.
+ */
+export function bytesToGb(bytes: number): number {
+  return bytes / 2 ** 30;
+}
+
 /** Human-sized, for a number someone is deciding to spend an evening on. */
 export function formatBytesGb(bytes: number): string {
-  return `${(bytes / 1e9).toFixed(2)} GB`;
+  return `${bytesToGb(bytes).toFixed(2)} GB`;
 }
 
 /**
@@ -853,7 +863,7 @@ export function generationCatalogRows(installed: ComfyFolderListing): Array<{
         name: model.label,
         tag: model.kind,
         params: model.kind === 'video' ? 'Video model' : model.kind === 'audio' ? 'Audio model' : 'Image model',
-        sizeGb: Number((bytes / 1e9).toFixed(2)),
+        sizeGb: Number(bytesToGb(bytes).toFixed(2)),
         pack: 'Generation',
         source: 'Hugging Face',
         live: true,

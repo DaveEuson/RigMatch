@@ -138,9 +138,12 @@ test('sizes typed by hand elsewhere in the app match the snapshot, in GiB', asyn
     ...USE_CASES.flatMap(({ id }) => [4, 8, 12, 24].flatMap((vramGb) => getFirstModelPicks(id, vramGb)))
       .map((pick) => [pick.id, Number.parseFloat(pick.size)]),
   ];
+  // ollama.com lists phi3:mini under its size tag only; skipping it let a
+  // decimal 2.3 GB stand beside the converted 2.0 in the same picks.
+  const tagAliases = { 'phi3:mini': 'phi3:3.8b' };
   let checked = 0;
   for (const [id, sizeGb] of typed) {
-    const [name, tag] = id.split(':');
+    const [name, tag] = (tagAliases[id] ?? id).split(':');
     const listed = families[name]?.sizes?.[tag]?.sizeGb;
     if (!listed) continue;
     checked += 1;

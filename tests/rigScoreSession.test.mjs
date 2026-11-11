@@ -160,3 +160,24 @@ test('subscribers hear every change, and stop hearing when they leave', async ()
   await made.runTiers([tier('light')]);
   assert.equal(heard, before);
 });
+
+test('after Clear Data the session forgets its results, and the next run does not write them back', async () => {
+  // The session kept what it loaded at launch: Results still showed cleared
+  // speeds, and the next test saved every one of them again.
+  let stored = [];
+  const writes = [];
+  const made = createRigSession(bridge({ light: done, standard: done }), {
+    loadHistory: () => stored,
+    saveHistory: (history) => { stored = history; writes.push(history); return true; },
+    loadEndurance: () => [],
+    now: () => '2026-10-24T21:00:00.000Z',
+  });
+  await made.runTiers([tier('light')]);
+  assert.equal(made.getState().history.length, 1);
+
+  stored = []; // what clearAppStorage leaves
+  made.reloadSaved();
+  assert.deepEqual(made.getState().history, []);
+  await made.runTiers([tier('standard')]);
+  assert.deepEqual(writes.at(-1).map((result) => result.tier), ['standard']);
+});

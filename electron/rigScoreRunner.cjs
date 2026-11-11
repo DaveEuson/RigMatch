@@ -13,7 +13,8 @@
  * screen offers the download through the same consent dialog as any other.
  *
  * Pure apart from the calls it is handed (fetchJson, the machine reading, the
- * unload), so tests drive it with a fake Ollama.
+ * unload) and its note of RigMatch's own models still leaving Ollama
+ * (noteStillReleasing), so tests drive it with a fake Ollama.
  */
 const { buildBenchmarkGenerateBody, isUnsupportedThinkError: thinkRefused, normalizePositiveNumber } = require('./ollamaRequest.cjs');
 const { assertValidModelName } = require('./security.cjs');
@@ -38,6 +39,15 @@ const RIG_KEEP_ALIVE_MS = 2 * 60 * 1000;
  * keep_alive: Ollama's default is five minutes.
  */
 const OTHER_CLIENT_SLACK_MS = 60 * 1000;
+/**
+ * How long a run waits for one of RigMatch's own models that Ollama is still
+ * releasing to leave, before it looks for another program's. The unload has
+ * already waited (main.cjs); a big model on a slow card can take longer still,
+ * and the command line waits this long too (cli/measure.ts).
+ */
+const OWN_RELEASE_WAIT_MS = 15_000;
+/** A note that one of RigMatch's models was still leaving is dropped after this: a copy listed later is another program's. */
+const RELEASE_NOTE_MS = 2 * 60 * 1000;
 /** The warm-up loads the model: 18 GB from a slow disk takes minutes. */
 const RIG_LOAD_TIMEOUT_MS = 10 * 60 * 1000;
 /** A timed run on a card that spilled into system memory can run at 2 tok/s. */
@@ -174,6 +184,47 @@ function sharedWith(listing, model, now) {
 }
 
 /**
+ * Models RigMatch asked Ollama to unload that were still listed when the wait
+ * for them ran out, by address and name, with when that was. The app's unload
+ * (unloadBenchmarkModel in main.cjs) notes them: the last tier's model, a
+ * show's, or the Labs and chat models beforeRun frees. The next run waits for
+ * them rather than taking them for another program's and refusing to start.
+ * It is the one thing this file keeps between runs; the command line keeps its
+ * own list (cli/measure.ts) and notes nothing here.
+ */
+const stillReleasing = new Map();
+
+function noteStillReleasing(baseUrl, model, at = Date.now()) {
+  stillReleasing.set(`${baseUrl}\n${model}`, { baseUrl, model, at });
+}
+
+/**
+ * What Ollama has loaded once RigMatch's own models have left, in two lists:
+ * `others`, another program's, and `ours`, RigMatch's own still listed when
+ * `waitMs` ran out. One of RigMatch's that is still leaving is waited for and
+ * never counted as another program's. Another program's model ends the wait at
+ * once, since the run does not start beside it either way.
+ */
+async function loadedOnceOursLeave({ fetchJson, baseUrl, signal, waitMs = OWN_RELEASE_WAIT_MS, pollMs = 100 }) {
+  const deadline = Date.now() + waitMs;
+  for (;;) {
+    const names = listedNames(await fetchJson(`${baseUrl}/api/ps`, { signal }, 3000));
+    // A note for a model that has gone, or an old one, is forgotten, so a copy loaded later is not taken for RigMatch's.
+    for (const [key, note] of stillReleasing) {
+      const gone = note.baseUrl === baseUrl && !names.some((name) => sameModel(name, note.model));
+      if (gone || Date.now() - note.at > RELEASE_NOTE_MS) stillReleasing.delete(key);
+    }
+    const notes = [...stillReleasing.values()].filter((note) => note.baseUrl === baseUrl);
+    const ours = names.filter((name) => notes.some((note) => sameModel(name, note.model)));
+    const others = names.filter((name) => !ours.includes(name));
+    if (!ours.length || others.length || Date.now() >= deadline) return { others, ours };
+    await new Promise((resolve) => setTimeout(resolve, pollMs));
+  }
+}
+
+const stillLeaving = (names) => `Ollama has not finished releasing ${names.join(' and ')}, which RigMatch had just unloaded. Run again in a moment.`;
+
+/**
  * Run one tier. Resolves with a status rather than throwing for every outcome
  * a person can meet (not installed, too big, busy, shared, stopped, failed),
  * so the screen can say each in its own words.
@@ -185,6 +236,7 @@ function sharedWith(listing, model, now) {
  *  - readMachine(): { gpu, vramGb, driverVersion, isUnifiedMemory, appVersion }
  *  - unloadModel(baseUrl, model): keep_alive 0, then wait for the card to free
  *  - beforeRun(): frees what RigMatch itself left loaded (Labs, its chat)
+ *  - releaseWaitMs: how long to wait for RigMatch's own models still leaving (noteStillReleasing)
  *  - isUnsupportedThinkError(error): an Ollama too old for think:false
  *  - signal: aborts the run (Stop)
  *  - onProgress(update)
@@ -203,6 +255,7 @@ async function runRigTier({
   readMachine,
   unloadModel,
   beforeRun = async () => {},
+  releaseWaitMs = OWN_RELEASE_WAIT_MS,
   isUnsupportedThinkError = thinkRefused,
   signal,
   onProgress = () => {},
@@ -235,13 +288,15 @@ async function runRigTier({
 
     // Another model in memory shares the card and slows this one, so the test
     // would measure the two together. RigMatch's own leftovers (Labs, its
-    // chat) are freed first. Anything still loaded belongs to another program,
-    // the tier's own model included (Open WebUI mid-reply on it, say), and is
-    // left alone: the test waits.
+    // chat) are freed first, and one Ollama is still releasing is waited for.
+    // Anything else still loaded belongs to another program, the tier's own
+    // model included (Open WebUI mid-reply on it, say), and is left alone: the
+    // test waits.
     await beforeRun();
     if (signal?.aborted) return { status: 'stopped' };
-    const resident = listedNames(await fetchJson(`${baseUrl}/api/ps`, { signal }, 3000));
-    if (resident.length) return { status: 'busy', loadedModels: resident };
+    const { others, ours } = await loadedOnceOursLeave({ fetchJson, baseUrl, signal, waitMs: releaseWaitMs });
+    if (others.length) return { status: 'busy', loadedModels: others };
+    if (ours.length) return { status: 'failed', error: stillLeaving(ours) };
 
     // What the card is doing now is what later readings are compared with, so it
     // is taken before the model loads. A watch that cannot start leaves the run
@@ -349,6 +404,9 @@ module.exports = {
   listedNames,
   isOutOfMemory,
   sharedWith,
+  noteStillReleasing,
+  loadedOnceOursLeave,
+  stillLeaving,
   runRigTier,
   unloadOllamaModel,
 };

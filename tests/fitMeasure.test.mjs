@@ -385,7 +385,7 @@ test('the command shares the app\'s runner and unload and think check, not copie
   const measure = read('../cli/measure.ts');
   const main = read('../electron/main.cjs');
   assert.match(measure, /import runner from '\.\.\/electron\/rigScoreRunner\.cjs';/);
-  assert.match(main, /const \{ runRigTier, unloadOllamaModel \} = require\('\.\/rigScoreRunner\.cjs'\);/);
+  assert.match(main, /const \{ noteStillReleasing, runRigTier, unloadOllamaModel \} = require\('\.\/rigScoreRunner\.cjs'\);/);
   assert.match(main, /if \(await unloadOllamaModel\(\{ fetchJson, baseUrl, model, settleMs: UNLOAD_SETTLE_TIMEOUT_MS \}\)\) return;/);
   assert.doesNotMatch(main, /^function isUnsupportedThinkError/m, 'the think check lives in ollamaRequest.cjs now');
 });

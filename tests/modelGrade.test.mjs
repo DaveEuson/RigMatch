@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
-const { activeShare, describeSpeed, footprintFit, gradeModel, gradeRow, measuredBandwidth, mixtureSpillFit, pullCommand, rigBandwidth } = await import('../src/lib/modelGrade.ts');
+const { activeShare, describeSpeed, footprintFit, gradeModel, gradeRow, measuredBandwidth, mixtureSpillFit, pullCommand, rigBandwidth, unifiedMemoryFit } = await import('../src/lib/modelGrade.ts');
 const { describeFitPlainly, getHardwareFit } = await import('../src/lib/modelCatalog.ts');
 const { MATCH_GRADE_BANDS } = await import('../src/lib/scoring.ts');
 const { catalogRows } = await import('../cli/fitCheck.ts');
@@ -456,4 +456,19 @@ test('a Models row reads the installed copy\'s label', () => {
   const squeezed = gradeRow({ ...listRow, installedModel: { name: 'newfamily:8b', model: 'newfamily:8b', sizeGb: 4.9, quantization: 'Q2_K' } }, rtx4070, {});
   assert.match(squeezed.summary, /squeezed to 2 bits/);
   assert.doesNotMatch(gradeRow(listRow, rtx4070, {}).summary, /squeezed/);
+});
+
+test('on shared memory, a 34B too big for its size class stays an F, not a recommended C', () => {
+  // 0.11.1 let "Tight fit" override the size-class rules: codellama:34b on an
+  // 18 GB Mac went from F "Too big" to a C you could download.
+  const mac18 = { vramGb: 18, unifiedMemory: true };
+  const big = row('codellama:34b', '34B', 17.7);
+  assert.equal(unifiedMemoryFit(big, mac18), null);
+  const graded = gradeModel(big, mac18);
+  assert.equal(graded.fit.tone, 'out-of-league');
+  assert.equal(graded.letter, 'F');
+  // A smaller model past the 70% share is still a tight fit, and one bigger
+  // than all the memory is still too big.
+  assert.equal(unifiedMemoryFit(row('x:8b', '8B', 13.5), mac18)?.tone, 'tight');
+  assert.equal(unifiedMemoryFit(row('x:34b', '34B', 19), mac18)?.tone, 'out-of-league');
 });
