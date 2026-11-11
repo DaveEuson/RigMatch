@@ -53,6 +53,7 @@ import {
 } from "./lib/conversationStore";
 import {
   DEFAULT_PERSONALITY_ID,
+  PERSONALITY_INSTRUCTIONS_MAX_CHARS,
   STAGES,
   loadSettings,
   saveSettings,
@@ -3761,7 +3762,11 @@ export default function App() {
                   }
                   placeholder="Describe tone, role, formatting preferences, and boundaries for this chat personality."
                   rows={5}
+                  maxLength={PERSONALITY_INSTRUCTIONS_MAX_CHARS}
                 />
+                {personalityEditor.instructions.length >= PERSONALITY_INSTRUCTIONS_MAX_CHARS && (
+                  <em>This is the limit: {PERSONALITY_INSTRUCTIONS_MAX_CHARS.toLocaleString()} characters. Anything past it is left out.</em>
+                )}
                 <em>These instructions are sent as a system message before the chat history.</em>
               </label>
 

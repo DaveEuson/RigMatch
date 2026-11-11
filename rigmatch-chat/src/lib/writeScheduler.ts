@@ -26,8 +26,10 @@ export type WriteScheduler<T> = {
  * nothing would be saved until it finished.
  *
  * Writes never overlap and never reject: a failing write is reported through
- * `onError` and the next attempt carries the newest state anyway. Persistence
- * failing must not take the app down, which is exactly what it used to do.
+ * `onError` and its value stays queued, so the next attempt (one retry after
+ * `delayMs`, a newer change, or `flush`) carries the newest state anyway.
+ * Persistence failing must not take the app down, which is exactly what it
+ * used to do.
  */
 export function createWriteScheduler<T>(options: {
   write: (value: T) => Promise<void>;
@@ -48,7 +50,7 @@ export function createWriteScheduler<T>(options: {
     now = () => Date.now(),
   } = options;
 
-  let pending: { value: T } | null = null;
+  let pending: { value: T; retried?: boolean } | null = null;
   let timer: unknown = null;
   let firstPendingAt = 0;
   let inFlight: Promise<void> | null = null;
@@ -64,19 +66,35 @@ export function createWriteScheduler<T>(options: {
     // One write at a time; whatever arrives meanwhile goes in the next one.
     if (inFlight) return inFlight;
     if (!pending) return;
-    const { value } = pending;
+    const { value, retried } = pending;
     pending = null;
     stopTimer();
+    let failed = false;
     inFlight = (async () => {
       try {
         await write(value);
       } catch (error) {
+        failed = true;
         onError?.(error);
       } finally {
         inFlight = null;
       }
     })();
     await inFlight;
+    if (failed) {
+      // Keep it queued. It used to be dropped, so with no change after the
+      // failure flush() found nothing and the newest messages were lost. A
+      // change that arrived meanwhile is newer and already queued, so it wins.
+      // One retry of its own after the usual delay, since a file held open by
+      // antivirus or a sync tool is soon let go; after that it waits for the
+      // next change or flush() rather than retrying in a loop.
+      if (!pending) {
+        pending = { value, retried: true };
+        firstPendingAt = now();
+        if (!retried) arm();
+      }
+      return;
+    }
     // Changes that landed during the write still need saving.
     if (pending) await runWrite();
   };

@@ -1,5 +1,5 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
-import { CONTEXT_STEPS } from "./contextWindow";
+import { CONTEXT_STEPS } from "./contextWindow.ts";
 
 const SETTINGS_KEY = "rigmatch-chat-settings";
 
@@ -46,6 +46,15 @@ export type PersonalityProfile = {
 };
 
 export const DEFAULT_PERSONALITY_ID = "default";
+
+/**
+ * The longest personality instructions kept. They ride in the system message of
+ * every request; 4,000 characters is about 1,000 tokens, a quarter of the
+ * smallest window Chat asks for. The instructions box stops here too, so what
+ * the box shows is what is saved: only the save used to cut, so the open
+ * session used the whole text and the end was gone after a restart.
+ */
+export const PERSONALITY_INSTRUCTIONS_MAX_CHARS = 4000;
 
 export const DEFAULT_PERSONALITY_PROFILES: PersonalityProfile[] = [
   {
@@ -108,7 +117,7 @@ function normalizeSettings(settings: AppSettings): AppSettings {
     profileMap.set(id, {
       id,
       name: name.slice(0, 40),
-      instructions: String(profile.instructions || "").slice(0, 4000),
+      instructions: String(profile.instructions || "").slice(0, PERSONALITY_INSTRUCTIONS_MAX_CHARS),
       avatarDataUrl: typeof profile.avatarDataUrl === "string" ? profile.avatarDataUrl : undefined,
       builtIn: profile.builtIn === true || DEFAULT_PERSONALITY_PROFILES.some((p) => p.id === id),
     });

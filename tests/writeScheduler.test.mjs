@@ -36,22 +36,25 @@ function fakeClock() {
   };
 }
 
-function recorder({ fail = false } = {}) {
+function recorder({ fail = false, failFirst = 0 } = {}) {
   const writes = [];
   const errors = [];
   let concurrent = 0;
   let maxConcurrent = 0;
+  let attempts = 0;
   return {
     writes,
     errors,
     get maxConcurrent() { return maxConcurrent; },
+    get attempts() { return attempts; },
     onError: (e) => errors.push(e),
     async write(value) {
+      attempts += 1;
       concurrent += 1;
       maxConcurrent = Math.max(maxConcurrent, concurrent);
       await settle();
       concurrent -= 1;
-      if (fail) throw new Error('disk full');
+      if (fail || attempts <= failFirst) throw new Error('disk full');
       writes.push(value);
     },
   };
@@ -136,13 +139,65 @@ test('a failing write is reported, never thrown, and does not stop the next one'
 
   s.schedule('one');
   await clock.advance(10);
-  await assert.doesNotReject(() => s.flush());
   assert.equal(failing.errors.length, 1);
   assert.match(String(failing.errors[0]), /disk full/);
+  // flush tries the queued value again, and that failing must not throw either.
+  await assert.doesNotReject(() => s.flush());
 
+  const before = failing.errors.length;
   s.schedule('two');
   await clock.advance(10);
-  assert.equal(failing.errors.length, 2, 'the next attempt still runs');
+  assert.equal(failing.errors.length, before + 1, 'the next attempt still runs');
+});
+
+test('a failed write stays queued, so flush tries it again', async () => {
+  // On Windows the rename over conversations.json fails while antivirus or a
+  // sync tool has the file open. The value was taken off the queue before the
+  // write, so with no change after it the close button's flush found nothing
+  // to write and the newest messages were lost.
+  const clock = fakeClock();
+  const rec = recorder({ failFirst: 1 });
+  const s = scheduler(rec, clock, { delayMs: 10 });
+
+  s.schedule('newest');
+  await clock.advance(10);
+  assert.equal(rec.errors.length, 1, 'the first write failed and was reported');
+  assert.deepEqual(rec.writes, []);
+
+  await s.flush();
+  assert.deepEqual(rec.writes, ['newest'], 'flush wrote what had failed');
+});
+
+test('a failed write is retried once after the usual delay, not in a loop', async () => {
+  const clock = fakeClock();
+  const once = recorder({ failFirst: 1 });
+  const s = scheduler(once, clock, { delayMs: 10 });
+  s.schedule('newest');
+  await clock.advance(10);
+  await clock.advance(10);
+  assert.deepEqual(once.writes, ['newest'], 'saved with no further change and no flush');
+
+  const failing = recorder({ fail: true });
+  const t = scheduler(failing, clock, { delayMs: 10 });
+  t.schedule('stuck');
+  await clock.advance(1000);
+  assert.equal(failing.attempts, 2, 'the write and one retry, then it waits for a change or flush');
+  t.schedule('next');
+  await clock.advance(10);
+  assert.equal(failing.attempts, 3, 'a new change is tried as usual');
+});
+
+test('a change after a failed write replaces it', async () => {
+  const clock = fakeClock();
+  const rec = recorder({ failFirst: 1 });
+  const s = scheduler(rec, clock, { delayMs: 10 });
+
+  s.schedule('old');
+  await clock.advance(10);
+  s.schedule('newer');
+  await clock.advance(1000);
+  await s.flush();
+  assert.deepEqual(rec.writes, ['newer'], 'the newest state, written once');
 });
 
 test('cancel drops pending work', async () => {
