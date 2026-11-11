@@ -5,13 +5,20 @@
 ## Before the first publish on a PC
 
 - **Two-factor sign-in has to be on for the npm account.** Without it, `npm publish` stops with `403 Forbidden ... Two-factor authentication or granular access token with bypass 2fa enabled is required to publish packages`. Turn it on at npmjs.com under Account → Two-Factor Authentication, then publish.
-- `npm login` opens the browser to sign in. It is needed once per PC, and again whenever `npm whoami` says you're signed out.
+- **Keep two security keys on the account, and the recovery codes somewhere you'll find them.** npm's two-factor sign-in asks for a security key, and a passkey counts: one saved in Windows (it shows under Windows Settings → Accounts → Passkeys) and one on your phone. With only one and it lost, the way back in is a recovery code, and **using a recovery code puts a 72-hour hold on the account**: no publishing, no tokens, no settings changes. That happened on 2026-11-11.
+- `npm login` opens the browser to sign in. It is needed once per PC, and again whenever `npm whoami` says you're signed out or fails with `401 Unauthorized` (the sign-in saved in `C:\Users\davee\.npmrc` has expired).
 
 ## Publishing, after the release is out
 
 Publish from the release tag, not from `main`: `main` may already hold work for the next release, and the npm package should be exactly the code the release was built from.
 
-Run these in PowerShell, one at a time, with the tag of the release you just published (`v0.11.1-beta` below):
+Run these in PowerShell, one at a time, with the tag of the release you just published (`v0.11.1-beta` below).
+
+If `C:\Users\davee\rigmatch-publish` is still there from last time, delete it first, or the clone stops with "already exists":
+
+```bash
+Remove-Item -Recurse -Force C:\Users\davee\rigmatch-publish
+```
 
 ```bash
 git clone --branch v0.11.1-beta --depth 1 https://github.com/DaveEuson/RigMatch.git C:\Users\davee\rigmatch-publish
@@ -26,12 +33,14 @@ npm ci
 ```
 
 ```bash
-cd cli
+cd C:\Users\davee\rigmatch-publish\cli
 ```
 
 ```bash
 npm pack --dry-run
 ```
+
+If it lists `rigmatch-ai` and hundreds of files, you're in the top folder instead of `cli`. Nothing is wrong (that package is private, so npm won't publish it); run the `cd` above again.
 
 `npm pack --dry-run` builds the CLI first (the `prepack` script runs `npm run build:cli` and copies the repo's `LICENSE` into `cli/`). Check two things in what it prints:
 
