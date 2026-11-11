@@ -82,6 +82,45 @@ npm run pack:win:local
 
 For the Rust companion audit, run `cargo audit` from `rigmatch-chat/src-tauri`.
 
+## Scoring changes
+
+A saved score must mean the same thing in every release, so a score from last
+month can sit beside one from today. Two numbers guard that:
+
+- `CURRENT_SCORE_SCHEMA_VERSION` in `src/lib/scoring.ts`, for the Match Score
+- `RIG_WORKLOAD.version` in `src/lib/rigScore.ts`, for the Speed score
+
+Move the number for any change that would give the same model on the same PC a
+different saved score: a weight, a signal, a scale, which answers count as
+graded, the questions, the judges, or how runs are timed. For the Speed score,
+any change to a field of `RIG_WORKLOAD`.
+
+A change like that ships with all three of these, or it doesn't ship:
+
+1. **The bump**, with a paragraph in the comment above the number saying what
+   changed and why an old score and a new one can't be ranked together (v5 to
+   v7 in `scoring.ts` are the pattern).
+2. **Old scores flagged.** Match Scores from an older schema say **Retest
+   recommended** and leave the category picks (`isLegacyScore`). Speed scores
+   with a different workload version are never put in one table
+   (`compareStamps`). Both follow from the bump alone; check them in the built
+   app on a profile that holds scores from the last release.
+3. **A release note** that says what changed, why, and that older scores say
+   Retest recommended.
+
+A bump goes in a minor release (0.12.0, 1.1.0), never a fix release (0.11.1,
+1.0.1).
+
+Not a bump: the Fit grade (A to F) and the fit labels on the Models list. They
+are advice before a download, not a saved score, so a change to them needs a
+release note and nothing more (0.11.1 did this).
+
+Before tagging, check whether either number moved since the last release:
+
+```bash
+git diff "$(git describe --tags --abbrev=0)" -- src/lib/scoring.ts src/lib/rigScore.ts
+```
+
 ## Manual smoke tests
 
 - Fresh install opens RigMatch and shows the expected version.
