@@ -419,6 +419,7 @@ const SKILL_FOR_TEST: Record<'reading' | 'listening' | 'code' | 'app', 'vision' 
 
 function App() {
   const savedHistory = useMemo(() => getSavedHistory(), []);
+  const savedChat = useMemo(() => savedHistory?.chatMessagesByModel ?? getSavedChat(), [savedHistory]);
   // On desktop, start with no benchmark data — the demo transcript/scores are
   // preview-only sample data and must not appear as if the user ran a real test.
   // (modelScores is gated the same way below.)
@@ -928,7 +929,7 @@ function App() {
     selectedRow,
     ollama,
     welcomeMessage: welcomeChatMessage,
-    initialMessagesByModel: savedHistory?.chatMessagesByModel ?? {},
+    initialMessagesByModel: savedChat,
     setActivity,
     imageGeneration: chatImageGeneration,
   });
@@ -1055,8 +1056,8 @@ function App() {
   );
   // The Top Match on screen, when it is on this PC: what "keeping your match" keeps.
   const cleanupKeep = useMemo(
-    () => topPickToKeep(modelRows, modelScores, system.gpu.vramGb, clearedTopMatches),
-    [modelRows, modelScores, system.gpu.vramGb, clearedTopMatches],
+    () => topPickToKeep(modelRows, modelScores, system.gpu.vramGb, clearedTopMatches, system.gpu.model),
+    [modelRows, modelScores, system.gpu.vramGb, clearedTopMatches, system.gpu.model],
   );
   const exceptTopPickRowsForCleanup = useMemo(
     () => rowsExceptTopPick(modelRows, cleanupKeep),
@@ -1137,8 +1138,8 @@ function App() {
     [modelRows, queuedRows, system.storage.availableGb],
   );
   const topRigPick = useMemo(
-    () => getRigPick(modelRows, modelScores, system.gpu.vramGb, clearedTopMatches),
-    [clearedTopMatches, modelRows, modelScores, system.gpu.vramGb],
+    () => getRigPick(modelRows, modelScores, system.gpu.vramGb, clearedTopMatches, system.gpu.model),
+    [clearedTopMatches, modelRows, modelScores, system.gpu.vramGb, system.gpu.model],
   );
 
   /**
@@ -2053,6 +2054,9 @@ function App() {
       // clearAppStorage. The state resets below then stop the save effects
       // writing anything back, and stop the UI showing data that is gone.
       clearAppStorage();
+      // The speed test and context check hold their results in memory, and the
+      // next run would write the cleared ones back.
+      rigScoreSession.reloadSaved();
       // Same invariant as initialBenchmark above: on desktop the demo transcript
       // and scores must never appear as if the user ran a real test. Clearing
       // everything and then seeding sample data is the worst place to break it —
@@ -6247,6 +6251,26 @@ function getSavedHistory(): PersistedHistory | null {
     };
   } catch {
     return null;
+  }
+}
+
+/**
+ * The in-app chat saved beside the scores, whether or not any score is.
+ *
+ * getSavedHistory returns null with no scores, and the chat went with it: the
+ * save that runs at launch then wrote an empty chat over the file. Anyone who
+ * chatted before testing anything, or pressed "Clear all scores" (which says
+ * chat is kept), lost every conversation at the next start.
+ */
+function getSavedChat(): Record<string, ChatMessage[]> {
+  try {
+    const saved = window.localStorage.getItem(HISTORY_STORAGE_KEY);
+    if (!saved) return {};
+    const parsed = JSON.parse(saved) as Partial<PersistedHistory>;
+    const selectedModel = typeof parsed.selectedModel === 'string' ? parsed.selectedModel : 'qwen2.5:7b';
+    return normalizeSavedChatMessagesByModel(parsed.chatMessagesByModel, parsed.chatMessages, selectedModel);
+  } catch {
+    return {};
   }
 }
 

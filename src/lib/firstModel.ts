@@ -93,10 +93,10 @@ export function getFirstModelPicks(useCase: FirstModelUseCase, vramGb: number): 
       ],
       small:  [
         { id: 'llama3.2:3b',    name: 'Llama 3.2 3B',   size: '1.9 GB', why: 'Best reasoning option at this VRAM level — follows instructions well', vramNote: 'Runs fully in VRAM' },
-        { id: 'phi3:mini',      name: 'Phi-3 Mini',      size: '2.3 GB', why: 'Microsoft trained it specifically for logical tasks — punches above its weight', vramNote: 'Runs fully in VRAM' },
+        { id: 'phi3:mini',      name: 'Phi-3 Mini',      size: '2.0 GB', why: 'Microsoft trained it specifically for logical tasks — punches above its weight', vramNote: 'Runs fully in VRAM' },
       ],
       tiny:   [
-        { id: 'phi3:mini',      name: 'Phi-3 Mini',      size: '2.3 GB', why: 'The reasoning standout at this size — Microsoft\'s focus was logic and instruction-following', vramNote: 'May use system RAM' },
+        { id: 'phi3:mini',      name: 'Phi-3 Mini',      size: '2.0 GB', why: 'The reasoning standout at this size — Microsoft\'s focus was logic and instruction-following', vramNote: 'May use system RAM' },
       ],
     },
     speed: {
@@ -106,7 +106,7 @@ export function getFirstModelPicks(useCase: FirstModelUseCase, vramGb: number): 
       ],
       medium: [
         { id: 'llama3.2:3b',    name: 'Llama 3.2 3B',   size: '1.9 GB', why: 'Fast and capable — the sweet spot for quick, reliable responses', vramNote: 'Flies in VRAM' },
-        { id: 'phi3:mini',      name: 'Phi-3 Mini',      size: '2.3 GB', why: 'Snappy and smart — responds quickly without sacrificing too much quality', vramNote: 'Flies in VRAM' },
+        { id: 'phi3:mini',      name: 'Phi-3 Mini',      size: '2.0 GB', why: 'Snappy and smart — responds quickly without sacrificing too much quality', vramNote: 'Flies in VRAM' },
       ],
       small:  [
         { id: 'llama3.2:1b',    name: 'Llama 3.2 1B',   size: '1.2 GB', why: 'Ultra-light — the fastest responses you\'ll get on any hardware', vramNote: 'Very fast even on CPU' },

@@ -21,7 +21,7 @@ import { getDisplayCountry, getModelFamily, getModelOrigin } from './modelOrigin
 import { normalizeModelKey } from './modelKey.ts';
 import { isSpecialistModel } from './chooseLineup.ts';
 import { NON_CHAT_NOTE, nonChatKind } from './modelKind.ts';
-import { MATCH_GRADE_BANDS, compareTestedModelScores, formatMatchScore, getScoreSortTotal, isLegacyScore } from './scoring.ts';
+import { MATCH_GRADE_BANDS, compareTestedModelScores, formatMatchScore, getScoreSortTotal, isLegacyScore, scoreDrift } from './scoring.ts';
 import { formatBytes, formatBytesPerSecond, formatGb, hashString, formatThroughput } from './format.ts';
 import {
   APP_VERSION,
@@ -737,14 +737,22 @@ export function getRigPick(
   scores: Record<string, TestedModelScore>,
   vramGb: number,
   clearedMatches = new Set<string>(),
+  gpuModel?: string,
 ): RigPick | null {
   const fittingRows = rows.filter((row) => modelFitsVram(row, vramGb) && !isClearedTopMatch(row, clearedMatches));
   if (fittingRows.length === 0) return null;
 
+  // Only a score measured on this computer can make a model its Top Match. One
+  // from a networked Ollama, or from before a card swap, carries the other
+  // machine's speed and fit; the grades and crowns already leave those out.
+  const measuredHere = (score: TestedModelScore) => {
+    const drift = scoreDrift(score, { gpuModel, vramGb });
+    return drift !== 'measured-elsewhere' && drift !== 'hardware-changed';
+  };
   const scoredPick = fittingRows
     .map((row) => ({ row, score: getModelScore(row, scores) }))
     .filter((item): item is { row: ModelRow; score: TestedModelScore } =>
-      Boolean(item.score) && !isCloudModel(item.row.displayName))
+      Boolean(item.score) && !isCloudModel(item.row.displayName) && measuredHere(item.score!))
     .sort((left, right) => compareTestedModelScores(left.score, right.score))[0];
 
   if (scoredPick) {
@@ -1870,9 +1878,11 @@ export function getTaskTopPicks(
    */
   isDrifted?: (score: TestedModelScore) => boolean,
 ): TaskPick[] {
+  // In Match order, so a tie on a task score goes to the better Match
+  // (bestModelForTask), not to whichever model was saved first.
   const scored = Object.values(modelScores).filter(
     (s) => !isCloudModel(s.model) && !isLegacyScore(s) && !(isDrifted?.(s) ?? false),
-  );
+  ).sort(compareTestedModelScores);
   if (scored.length === 0) return [];
 
   const picks: TaskPick[] = [];

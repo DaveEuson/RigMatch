@@ -67,6 +67,12 @@ export type RigSession = {
   /** The context check on one installed model. */
   checkContext: (model: string) => Promise<void>;
   stop: () => void;
+  /**
+   * Read the saved results again, after Clear Data wiped them. The session
+   * kept the ones it loaded at launch, so Results still showed them and the
+   * next speed test or context check wrote every one back to disk.
+   */
+  reloadSaved: () => void;
 };
 
 /** The graphics card is taken by a speed test or a context check. */
@@ -185,11 +191,21 @@ export function createRigSession(
     let outcome: EnduranceOutcome;
     try {
       // The card, read before the model loads: where a model gives out moves with what else is using it.
-      const reading = await bridge.getGpuContention?.().catch(() => null);
-      const baseline = reading ? baselineFromContention(reading) : null;
-      outcome = stopRequested
-        ? { kind: 'stopped', message: 'Stopped. Nothing was saved for this check.' }
-        : assembleEnduranceResult(model, await run(enduranceRequest(model, progressId)), baseline, now());
+      const readBaseline = async () => {
+        const reading = await bridge.getGpuContention?.().catch(() => null);
+        return reading ? baselineFromContention(reading) : null;
+      };
+      const stopped: EnduranceRunReply = { status: 'stopped' };
+      let baseline = await readBaseline();
+      let reply = stopRequested ? stopped : await run({ ...enduranceRequest(model, progressId), stopIfFreed: true });
+      if (reply.status === 'freed') {
+        // RigMatch's own models (Labs, its chat) were on the card when it was
+        // read, and the check freed them and stopped before loading anything. Read
+        // it again without them, so their memory is not taken for another program's.
+        baseline = await readBaseline();
+        reply = stopRequested ? stopped : await run(enduranceRequest(model, progressId));
+      }
+      outcome = assembleEnduranceResult(model, reply, baseline, now());
     } catch (error) {
       outcome = { kind: 'failed', message: `The check did not finish: ${getErrorMessage(error)}` };
     }
@@ -214,5 +230,12 @@ export function createRigSession(
     runTiers,
     checkContext,
     stop,
+    reloadSaved: () => set({
+      history: (options.loadHistory ?? readRigHistory)(),
+      messages: {},
+      saveFailed: false,
+      enduranceResults: (options.loadEndurance ?? readEnduranceResults)(),
+      enduranceMessages: {},
+    }),
   };
 }

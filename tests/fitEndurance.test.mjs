@@ -260,6 +260,21 @@ test('the model must be installed and local: a missing one gets its pull command
   }
 });
 
+test('an embedding model is refused before anything loads, as the app leaves it out: it writes no text to time', async () => {
+  const ollama = await fakeOllama({ installed: ['nomic-embed-text:latest', 'bge-m3:latest'], onGenerate: fourteen() });
+  try {
+    for (const model of ['nomic-embed-text', 'bge-m3:latest']) {
+      const run = await runCommand({ model, json: false }, ollama);
+      assert.ok(run.error, `${model} is refused`);
+      assert.ok(run.error.message.startsWith(`${model} is an embedding model`), run.error.message);
+      assert.match(run.error.message, /rigmatch-fit --endurance checks models that write text\.$/);
+    }
+    assert.equal(ollama.calls.length, 0, 'Ollama is not asked anything');
+  } finally {
+    await ollama.close();
+  }
+});
+
 test('Ctrl+C mid-run stops it, unloads the model and exits 130; a second Ctrl+C leaves at once', async () => {
   const ollama = await fakeOllama({ installed: [MODEL], stall: true });
   try {

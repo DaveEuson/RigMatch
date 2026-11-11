@@ -42,8 +42,9 @@ export function topPickToKeep(
   modelScores: Record<string, TestedModelScore>,
   vramGb: number,
   clearedMatches?: Set<string>,
+  gpuModel?: string,
 ): string | undefined {
-  const pick = getRigPick(modelRows.filter((row) => row.installed), modelScores, vramGb, clearedMatches);
+  const pick = getRigPick(modelRows.filter((row) => row.installed), modelScores, vramGb, clearedMatches, gpuModel);
   return pick?.tone === 'scored' ? pick.row.displayName : undefined;
 }
 

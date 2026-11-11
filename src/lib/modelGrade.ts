@@ -376,6 +376,11 @@ export function mixtureSpillFit(row: GradeRow, hardware: GradeHardware): Hardwar
 export function unifiedMemoryFit(row: GradeRow, hardware: GradeHardware): HardwareFit | null {
   if (row.fitOverride || !row.sizeGb || !hardware.unifiedMemory || hardware.vramGb <= 0) return null;
   if (row.sizeGb <= hardware.vramGb * UNIFIED_USABLE_SHARE) return null;
+  // A 32B on an 18 GB Mac is "Too big" under getHardwareFit's size-class
+  // rules. As an override, "Tight fit" would skip those rules and turn it into
+  // a recommended C, while a smaller 32B under the share stayed an F.
+  if (row.sizeGb <= hardware.vramGb
+    && getHardwareFit({ ...row, fitOverride: undefined }, hardware.vramGb).tone === 'out-of-league') return null;
   const memory = `${formatGb(hardware.vramGb)} of shared memory`;
   return row.sizeGb > hardware.vramGb
     ? {

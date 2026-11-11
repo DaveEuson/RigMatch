@@ -4,7 +4,7 @@ import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
 const {
-  normalizeRigRequest, readRigRun, weightsDigest, sameModel, isOutOfMemory, sharedWith, runRigTier, unloadOllamaModel,
+  normalizeRigRequest, readRigRun, weightsDigest, sameModel, isOutOfMemory, sharedWith, runRigTier, unloadOllamaModel, noteStillReleasing,
 } = require('../electron/rigScoreRunner.cjs');
 const { RIG_TIERS, RIG_WORKLOAD } = await import('../src/lib/rigScore.ts');
 const { rigRunRequest, rigModelRequest, assembleTierResult, assembleModelResult } = await import('../src/lib/rigScoreRun.ts');
@@ -286,6 +286,80 @@ test("RigMatch's own copy (Labs, its chat) is freed by beforeRun, and then the t
   assert.equal(answer.status, 'done');
   assert.equal(answer.coldLoadSeconds, 2);
   assert.deepEqual(ollama.unloads, ['llama3.2:3b'], 'only its own copy, after the last run');
+});
+
+// ---- RigMatch's own models still leaving Ollama: waited for, never another program's ----------------
+// Each test has its own address, because what RigMatch noted is kept between runs.
+
+test("Run all: the last tier's model, still leaving after its unload, is waited for and not taken for another program's", async () => {
+  // The Standard tier's model, unloaded at the end of its run, was still listed when the unload's wait ran out.
+  const baseUrl = 'http://127.0.0.1:11501';
+  const ollama = fakeOllama({ loaded: ['qwen3.5:9b'], generate: () => reply(100, 3000) });
+  noteStillReleasing(baseUrl, 'qwen3.5:9b');
+  let looks = 0;
+  const fetchJson = async (url, options) => {
+    // Ollama lets it go between the second and third look.
+    if (new URL(url).pathname === '/api/ps' && ++looks === 3) ollama.state.loaded = [];
+    return ollama.fetchJson(url, options);
+  };
+  const answer = await run(ollama, { baseUrl, fetchJson, releaseWaitMs: 5000 });
+  assert.equal(answer.status, 'done', 'the next tier runs instead of ending the queue');
+  assert.equal(answer.runs.length, 3);
+  assert.deepEqual(ollama.unloads, ['llama3.2:3b'], 'it unloads only the model it loaded');
+});
+
+test("RigMatch's own Labs or chat model that beforeRun freed, slow to leave, is waited for too", async () => {
+  const baseUrl = 'http://127.0.0.1:11502';
+  const ollama = fakeOllama({ loaded: ['qwen3.5:9b'], generate: () => reply(100, 3000) });
+  // As main.cjs's beforeRun does when the chat's model outlasts the unload's own wait: noted, then gone a moment later.
+  const beforeRun = async () => {
+    noteStillReleasing(baseUrl, 'qwen3.5:9b');
+    setTimeout(() => { ollama.state.loaded = ollama.state.loaded.filter((entry) => entry.name !== 'qwen3.5:9b'); }, 250);
+  };
+  const answer = await run(ollama, { baseUrl, beforeRun, releaseWaitMs: 5000 });
+  assert.equal(answer.status, 'done');
+});
+
+test("one of RigMatch's own still listed when the wait runs out is a run to try again, never the card being busy", async () => {
+  const baseUrl = 'http://127.0.0.1:11503';
+  const stuck = fakeOllama({ loaded: ['qwen3.5:9b'], generate: () => reply(100, 3000) });
+  noteStillReleasing(baseUrl, 'qwen3.5:9b');
+  const answer = await run(stuck, { baseUrl, releaseWaitMs: 150 });
+  assert.deepEqual(answer, { status: 'failed', error: 'Ollama has not finished releasing qwen3.5:9b, which RigMatch had just unloaded. Run again in a moment.' });
+  assert.equal(stuck.generates().length, 0, 'nothing is timed beside it');
+  assert.deepEqual(stuck.unloads, []);
+  // A failure, so Run all goes on to the next tier; busy would end the queue blaming another program.
+  assert.equal(assembleTierResult(light, answer, '2026-10-24T21:00:00.000Z').kind, 'failed');
+
+  // Beside another program's model, that one is named, and RigMatch's own is not.
+  const both = fakeOllama({ loaded: ['qwen3.5:9b', 'mistral:7b'], generate: () => reply(100, 3000) });
+  assert.deepEqual(await run(both, { baseUrl, releaseWaitMs: 5000 }), { status: 'busy', loadedModels: ['mistral:7b'] });
+  assert.deepEqual(both.unloads, []);
+});
+
+test("a note that one of RigMatch's models was leaving is forgotten once it has gone, so a later copy is another program's", async () => {
+  const baseUrl = 'http://127.0.0.1:11504';
+  noteStillReleasing(baseUrl, 'qwen3.5:9b');
+  assert.equal((await run(fakeOllama({ generate: () => reply(100, 3000) }), { baseUrl })).status, 'done', 'gone by the next run');
+  // Open WebUI loads the same model later: that copy is not RigMatch's to wait for.
+  const later = fakeOllama({ loaded: ['qwen3.5:9b'], generate: () => reply(100, 3000) });
+  assert.deepEqual(await run(later, { baseUrl, releaseWaitMs: 5000 }), { status: 'busy', loadedModels: ['qwen3.5:9b'] });
+  // Nor is one noted long ago and never looked for since.
+  noteStillReleasing(baseUrl, 'gemma3:4b', Date.now() - 10 * 60_000);
+  const old = fakeOllama({ loaded: ['gemma3:4b'], generate: () => reply(100, 3000) });
+  assert.deepEqual(await run(old, { baseUrl, releaseWaitMs: 5000 }), { status: 'busy', loadedModels: ['gemma3:4b'] });
+});
+
+test("the app's unload waits up to 15 s, as the command line's does, and notes a model that has still not left", async () => {
+  const { readFileSync } = await import('node:fs');
+  const main = readFileSync(new URL('../electron/main.cjs', import.meta.url), 'utf-8').replace(/\r\n/g, '\n');
+  assert.match(main, /^const UNLOAD_SETTLE_TIMEOUT_MS = 15000;$/m);
+  const start = main.indexOf('async function unloadBenchmarkModel(');
+  const unload = main.slice(start, main.indexOf('\n}\n', start));
+  const settled = unload.indexOf('if (await unloadOllamaModel({ fetchJson, baseUrl, model, settleMs: UNLOAD_SETTLE_TIMEOUT_MS })) return;');
+  const noted = unload.indexOf('noteStillReleasing(baseUrl, model);');
+  assert.ok(settled > 0 && noted > settled, 'noted only when it was still listed after the wait');
+  assert.ok(noted < unload.indexOf('} catch (error) {'), 'and not for an unload Ollama never took');
 });
 
 test('a model that comes to share the card mid-test means nothing is kept, and the test model is still unloaded', async () => {

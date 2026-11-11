@@ -136,6 +136,10 @@ export type TaskWinner = {
  * The best model for one task, for callers that want to route work to it —
  * summarizing a conversation, answering a coding question — rather than display
  * a league table.
+ *
+ * A tie goes to the model earlier in `available` (the sort is stable), so pass
+ * it in Match order: four valid JSON answers score exactly 92 for any model,
+ * and in save order the first model ever tested took every such tie.
  */
 export function bestModelForTask(
   byModel: Record<string, TaskScores | undefined>,

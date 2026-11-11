@@ -37,10 +37,14 @@ function transientFailure(error) {
  * Whether asking a saved answer again could give a different result: an answer
  * the PC broke, in a result saved with what an exact re-score needs. Through
  * 0.10 the only such answer a finished run keeps is a drawing that ran out of
- * time; every other PC failure ended the model's run.
+ * time; every other PC failure ended the model's run. The renderer offers the
+ * button by the same rule (answerNote in src/lib/answerRetest.ts).
  */
 function canRetest(promptResult) {
   if (!promptResult || typeof promptResult.countedRuns !== 'number') return false;
+  // A history saved when storage was nearly full keeps the scores but not the
+  // question's text (dropTranscripts in src/lib/safeStorage.ts): nothing to ask.
+  if (typeof promptResult.prompt !== 'string' || !promptResult.prompt.trim()) return false;
   return promptResult.timedOut === true || /^timeout$/i.test(String(promptResult.doneReason || ''));
 }
 

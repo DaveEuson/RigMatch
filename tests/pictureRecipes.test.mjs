@@ -55,8 +55,9 @@ test('steps and guidance come from the recipe, not the word "turbo"', () => {
 });
 
 test('sized by what is held at once, both fit a 12 GB card', () => {
-  assert.equal(recipeFootprintGb('z-image-turbo'), 8.04, 'the encoder, the larger of the two phases');
-  assert.equal(recipeFootprintGb('flux2-klein-4b'), 8.09, 'model plus VAE');
+  // Binary GB, the unit graphics memory is read in: 8.04 and 8.09 decimal.
+  assert.equal(recipeFootprintGb('z-image-turbo'), 7.49, 'the encoder, the larger of the two phases');
+  assert.equal(recipeFootprintGb('flux2-klein-4b'), 7.53, 'model plus VAE');
   assert.equal(recipeFootprintGb('sdxl-turbo'), null);
   for (const id of ['z-image-turbo', 'flux2-klein-4b']) {
     assert.equal(getHardwareFit({ params: 'Image model', sizeGb: recipeFootprintGb(id) }, 12).recommend, true, id);

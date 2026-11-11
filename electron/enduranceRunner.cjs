@@ -35,7 +35,9 @@
 const { randomInt, randomUUID } = require('node:crypto');
 const { buildBenchmarkGenerateBody, isUnsupportedThinkError: thinkRefused, normalizePositiveNumber } = require('./ollamaRequest.cjs');
 const { assertValidModelName } = require('./security.cjs');
-const { RIG_KEEP_ALIVE, isOutOfMemory, listedNames, sameModel, sharedWith, weightsDigest } = require('./rigScoreRunner.cjs');
+const {
+  RIG_KEEP_ALIVE, isOutOfMemory, listedNames, loadedOnceOursLeave, sameModel, sharedWith, stillLeaving, weightsDigest,
+} = require('./rigScoreRunner.cjs');
 
 /** A stage's prompt, as Ollama counted it, may be this far from the target before the stage is thrown out. */
 const SIZE_TOLERANCE = 0.15;
@@ -147,7 +149,12 @@ function normalizeEnduranceRequest(request = {}) {
   });
   if (new Set(stages.map((stage) => stage.id)).size !== stages.length) throw new Error('The context stages need different ids.');
   const numPredict = Number(request.numPredict);
-  return { model, stages, numPredict: Number.isInteger(numPredict) ? Math.min(512, Math.max(16, numPredict)) : 128 };
+  return {
+    model,
+    stages,
+    numPredict: Number.isInteger(numPredict) ? Math.min(512, Math.max(16, numPredict)) : 128,
+    stopIfFreed: request.stopIfFreed === true,
+  };
 }
 
 const seconds = (nanoseconds) => {
@@ -172,6 +179,8 @@ const tooLargeToSizeFrom = (tokens, numCtx) => !(tokens > 0 && tokens <= numCtx 
  * Run the stages. Resolves with a status rather than throwing for every
  * outcome a person can meet (not installed, too big, busy, shared, stopped,
  * failed), as runRigTier does, so a screen can say each in its own words.
+ * Asked to (request.stopIfFreed), it also stops with "freed" once it has had to
+ * free RigMatch's own models, before loading anything.
  *
  * deps:
  *  - request: what the renderer sent (normalizeEnduranceRequest checks it)
@@ -180,6 +189,7 @@ const tooLargeToSizeFrom = (tokens, numCtx) => !(tokens > 0 && tokens <= numCtx 
  *  - readMachine(): { gpu, vramGb, driverVersion, isUnifiedMemory, appVersion }
  *  - unloadModel(baseUrl, model): keep_alive 0, then wait for the card to free
  *  - beforeRun(): frees what RigMatch itself left loaded (Labs, its chat)
+ *  - releaseWaitMs: how long to wait for RigMatch's own models still leaving (rigScoreRunner.cjs)
  *  - isUnsupportedThinkError(error): an Ollama too old for think:false
  *  - signal: aborts the run (Stop)
  *  - onProgress(update)
@@ -193,6 +203,7 @@ async function runEndurance({
   readMachine,
   unloadModel,
   beforeRun = async () => {},
+  releaseWaitMs,
   isUnsupportedThinkError = thinkRefused,
   signal,
   onProgress = () => {},
@@ -220,12 +231,21 @@ async function runEndurance({
     ]);
 
     // Another model in memory shares the card and slows this one. RigMatch's own
-    // leftovers are freed first; anything still loaded belongs to another
-    // program, this model included, and is left alone: the test does not start.
+    // leftovers are freed first, and one Ollama is still releasing is waited
+    // for; anything else still loaded belongs to another program, this model
+    // included, and is left alone: the test does not start.
+    // What was loaded is read first when the caller asks (stopIfFreed): it read
+    // the card already, and wants to know if RigMatch's own models were on it.
+    const before = plan.stopIfFreed ? listedNames(await fetchJson(`${baseUrl}/api/ps`, { signal }, 3000).catch(() => null)) : [];
     await beforeRun();
     if (signal?.aborted) return { status: 'stopped' };
-    const resident = listedNames(await fetchJson(`${baseUrl}/api/ps`, { signal }, 3000));
-    if (resident.length) return { status: 'busy', loadedModels: resident };
+    const { others, ours } = await loadedOnceOursLeave({ fetchJson, baseUrl, signal, waitMs: releaseWaitMs });
+    if (others.length) return { status: 'busy', loadedModels: others };
+    if (ours.length) return { status: 'failed', error: stillLeaving(ours) };
+    // Everything that was loaded has gone, so it was RigMatch's own (or left by
+    // itself). The caller's reading of the card counted it, so the check stops
+    // here, before anything loads, for the card to be read again without it.
+    if (before.length) return { status: 'freed', loadedModels: before };
 
     return await timedStages({
       plan, baseUrl, fetchJson, isUnsupportedThinkError, signal, onProgress, now, makeNonce, makePasskey, machine, version, show,

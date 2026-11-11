@@ -8,7 +8,7 @@ const require = createRequire(import.meta.url);
 const {
   SIZE_TOLERANCE, buildEndurancePrompt, calibrateLines, promptSizeOk, normalizeEnduranceRequest, runEndurance,
 } = require('../electron/enduranceRunner.cjs');
-const { unloadOllamaModel } = require('../electron/rigScoreRunner.cjs');
+const { unloadOllamaModel, noteStillReleasing } = require('../electron/rigScoreRunner.cjs');
 const { fetchJson } = await import('../cli/ollamaHttp.ts');
 const {
   ENDURANCE_STAGES, ENDURANCE_NUM_PREDICT, ENDURANCE_SPEED_KEPT_MIN, ENDURANCE_ON_CARD_MIN,
@@ -212,7 +212,7 @@ test('it says how long before it starts: minutes, and more for a bigger, slower 
 
 // ---- The runner, against a stand-in Ollama -------------------------------------------
 
-async function run({ fake, request = enduranceRequest(MODEL, 'run-1'), signal, progress = [] } = {}) {
+async function run({ fake, request = enduranceRequest(MODEL, 'run-1'), signal, progress = [], ...overrides } = {}) {
   let nonce = 0;
   let key = 1000;
   return runEndurance({
@@ -225,6 +225,7 @@ async function run({ fake, request = enduranceRequest(MODEL, 'run-1'), signal, p
     onProgress: (update) => progress.push(update),
     makeNonce: () => `nonce-${(nonce += 1)}`,
     makePasskey: () => `RM-${(key += 1)}`,
+    ...overrides,
   });
 }
 
@@ -353,6 +354,52 @@ test('another program\'s model is never run beside: it refuses, loads nothing an
   }
 });
 
+test("RigMatch's own chat model, slow to leave after beforeRun freed it, is waited for and not taken for another program's", async () => {
+  // A big model on a slow card: still listed 400 ms after its unload.
+  const fake = await fakeOllama({ installed: [MODEL], loaded: ['qwen3.5:9b'], releaseMs: 400, onGenerate: simulate() });
+  const stuck = await fakeOllama({ installed: [MODEL], loaded: ['qwen3.5:9b'], onGenerate: simulate() });
+  try {
+    // As main.cjs's beforeRun does: unload it, and note it if the unload's own wait runs out first.
+    const beforeRun = async () => {
+      if (!(await unloadOllamaModel({ fetchJson, baseUrl: fake.url, model: 'qwen3.5:9b', settleMs: 50, pollMs: 10 }))) noteStillReleasing(fake.url, 'qwen3.5:9b');
+    };
+    const reply = await run({ fake, beforeRun });
+    assert.equal(reply.status, 'done');
+    assert.ok(fake.loads().every((model) => model === MODEL));
+
+    // Still there when the wait runs out: the check does not start, and says why without blaming another program.
+    noteStillReleasing(stuck.url, 'qwen3.5:9b');
+    const failed = await run({ fake: stuck, releaseWaitMs: 100 });
+    assert.deepEqual(failed, { status: 'failed', error: 'Ollama has not finished releasing qwen3.5:9b, which RigMatch had just unloaded. Run again in a moment.' });
+    assert.deepEqual(stuck.loads(), []);
+  } finally {
+    await fake.close();
+    await stuck.close();
+  }
+});
+
+test("asked to, a check that had to free RigMatch's own models first stops before loading anything, so the card can be read again", async () => {
+  const fake = await fakeOllama({ installed: [MODEL], loaded: ['qwen3.5:9b'], onGenerate: simulate() });
+  const plain = await fakeOllama({ installed: [MODEL], loaded: ['qwen3.5:9b'], onGenerate: simulate() });
+  try {
+    // beforeRun frees the chat's model, as main.cjs's does.
+    const freeing = (on) => async () => { await unloadOllamaModel({ fetchJson, baseUrl: on.url, model: 'qwen3.5:9b' }); };
+    const ask = { ...enduranceRequest(MODEL, 'run-1'), stopIfFreed: true };
+    assert.deepEqual(await run({ fake, request: ask, beforeRun: freeing(fake) }), { status: 'freed', loadedModels: ['qwen3.5:9b'] });
+    assert.deepEqual(fake.loads(), [], 'nothing was loaded');
+    assert.deepEqual(fake.unloads(), ['qwen3.5:9b'], "only RigMatch's own model was unloaded");
+    // With nothing of RigMatch's left to free, the same request runs.
+    assert.equal((await run({ fake, request: ask, beforeRun: freeing(fake) })).status, 'done');
+    // Not asked (the command line), it frees and runs, as before.
+    assert.equal((await run({ fake: plain, beforeRun: freeing(plain) })).status, 'done');
+    // Another program's model still means busy, asked or not.
+    assert.deepEqual(await run({ fake: plain, request: ask, beforeRun: async () => { plain.state.loaded.push({ name: 'mistral:7b', size: 100, size_vram: 100 }); } }), { status: 'busy', loadedModels: ['mistral:7b'] });
+  } finally {
+    await fake.close();
+    await plain.close();
+  }
+});
+
 test('a program that loads a model mid-run ends the check: nothing is kept, its model is left alone, ours is unloaded', async () => {
   let fake;
   fake = await fakeOllama({
@@ -388,6 +435,24 @@ test('a card that was busy before the check is said beside the verdict too', () 
   const busy = assembleEnduranceResult(MODEL, doneReply(stages), { level: 'busy', vramUsedPercent: 49, utilizationPercent: 62, message: 'Before starting: the graphics card is 62% busy.' }, 'now').result;
   assert.match(busy.verdict.notes.join(' '), /The graphics card was busy before the check started, so a slow-down here may be something else's and not the model's/);
   assert.equal(busy.verdict.kind, 'slows', 'it does not change what was measured');
+});
+
+test('a stage with no reading of the card says nothing about where the model sat, and the verdict stands', () => {
+  // Ollama's /api/ps did not answer after the stages, or listed the model without a size: no share.
+  const unread = realStages('qwen3:8b').map((stage) => ({ ...stage, gpuShare: null }));
+  const none = resultOf(unread).verdict;
+  assert.equal(none.kind, 'holds');
+  assert.equal(none.headline, 'Holds up to 16K on your card');
+  assert.doesNotMatch(none.detail, /graphics card/, 'no claim either way');
+  assert.match(none.detail, /The passkey hidden in the prompt came back at every size\./);
+
+  // The largest size unread: the smaller sizes' readings do not speak for it.
+  const partly = realStages('qwen3:8b');
+  partly[2] = { ...partly[2], gpuShare: null };
+  assert.doesNotMatch(resultOf(partly).verdict.detail, /graphics card/);
+
+  // Every size read: said, as before.
+  assert.match(resultOf(realStages('qwen3:8b')).verdict.detail, /The whole model stays on the graphics card\./);
 });
 
 test('stopping cleans up: the model is unloaded and nothing is reported', async () => {

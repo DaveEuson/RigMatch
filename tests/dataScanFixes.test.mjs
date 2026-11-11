@@ -184,7 +184,9 @@ test('the MLX message is for Ollama failing to load an MLX model, off a Mac', ()
 test('a history save that fails at every rung tells the user, once', () => {
   assert.match(historySaveNote(-1), /could not save your scores/);
   assert.equal(historySaveNote(0), null);
-  assert.match(historySaveNote(1), /some saved answer text was dropped/);
-  assert.match(historySaveNote(3), /not enough browser storage left for the answer transcripts/);
+  // Rung 1 drops the chats only; it used to say answer text was dropped.
+  assert.match(historySaveNote(1), /in-app chats were not saved\. Scores and answers were kept/);
+  assert.match(historySaveNote(2), /in-app chats and the saved answer text were dropped/);
+  assert.match(historySaveNote(3), /not enough browser storage left for the answer transcripts or the in-app chats/);
   assert.match(app, /if \(!historySaveFailedRef\.current && note\) tellUser\(note\);/);
 });
