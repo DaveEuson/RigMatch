@@ -19,6 +19,8 @@ import {
 } from './contextEndurance.ts';
 import { addEnduranceResult, readEnduranceResults, saveEnduranceResults } from './enduranceHistory.ts';
 import { getErrorMessage } from './format.ts';
+import { assemblePalResult, palRequest, type PalOutcome, type PalProgress, type PalResult, type PalRunReply, type PalRunRequest } from './palCheck.ts';
+import { addPalResult, readPalResults, savePalResults } from './palHistory.ts';
 import type { RigTier, RigTierId } from './rigScore.ts';
 import { addRigResult, readRigHistory, saveRigHistory } from './rigScoreHistory.ts';
 import {
@@ -41,6 +43,9 @@ export type RigScoreBridge = {
   onEnduranceProgress?: (callback: (update: EnduranceProgress) => void) => () => void;
   /** What the graphics card is doing, read just before a context check to name its baseline. */
   getGpuContention?: () => Promise<Parameters<typeof baselineFromContention>[0]>;
+  /** The pal check (palCheck.ts). Stopped with cancelRigScore too. */
+  runPalCheck?: (request: PalRunRequest) => Promise<PalRunReply>;
+  onPalProgress?: (callback: (update: PalProgress) => void) => () => void;
 };
 
 export type RigSessionState = {
@@ -58,6 +63,13 @@ export type RigSessionState = {
   enduranceResults: EnduranceResult[];
   /** Why a model has no new context check: busy, stopped, failed. */
   enduranceMessages: Record<string, string>;
+  /** The pal check in progress. It loads a model, so it holds the card like the others. */
+  pal: { model: string; progressId: string } | null;
+  palProgress: PalProgress | null;
+  /** Each model's latest pal check, newest first. */
+  palResults: PalResult[];
+  /** Why a model has no new pal check: busy, stopped, failed. */
+  palMessages: Record<string, string>;
 };
 
 export type RigSession = {
@@ -66,6 +78,8 @@ export type RigSession = {
   runTiers: (tiers: RigTier[]) => Promise<void>;
   /** The context check on one installed model. */
   checkContext: (model: string) => Promise<void>;
+  /** The pal check on one installed model. */
+  checkPal: (model: string) => Promise<void>;
   stop: () => void;
   /**
    * Read the saved results again, after Clear Data wiped them. The session
@@ -75,8 +89,8 @@ export type RigSession = {
   reloadSaved: () => void;
 };
 
-/** The graphics card is taken by a speed test or a context check. */
-export const rigScoreBusy = (state: RigSessionState): boolean => Boolean(state.running || state.endurance);
+/** The graphics card is taken by a speed test, a context check or a pal check. */
+export const rigScoreBusy = (state: RigSessionState): boolean => Boolean(state.running || state.endurance || state.pal);
 
 export function createRigSession(
   bridge: RigScoreBridge,
@@ -85,17 +99,21 @@ export function createRigSession(
     saveHistory?: (history: RigResult[]) => boolean;
     loadEndurance?: () => EnduranceResult[];
     saveEndurance?: (results: EnduranceResult[]) => boolean;
+    loadPal?: () => PalResult[];
+    savePal?: (results: PalResult[]) => boolean;
     now?: () => string;
   } = {},
 ): RigSession {
   const save = options.saveHistory ?? saveRigHistory;
   const saveEndurance = options.saveEndurance ?? saveEnduranceResults;
+  const savePal = options.savePal ?? savePalResults;
   const now = options.now ?? (() => new Date().toISOString());
   let state: RigSessionState | null = null;
   const listeners = new Set<() => void>();
   let stopRequested = false;
   let unlisten: (() => void) | null = null;
   let unlistenEndurance: (() => void) | null = null;
+  let unlistenPal: (() => void) | null = null;
 
   const getState = (): RigSessionState => {
     state ??= {
@@ -108,6 +126,10 @@ export function createRigSession(
       enduranceProgress: null,
       enduranceResults: (options.loadEndurance ?? readEnduranceResults)(),
       enduranceMessages: {},
+      pal: null,
+      palProgress: null,
+      palResults: (options.loadPal ?? readPalResults)(),
+      palMessages: {},
     };
     return state;
   };
@@ -213,9 +235,43 @@ export function createRigSession(
     set({ endurance: null, enduranceProgress: null });
   };
 
+  const recordPal = (model: string, outcome: PalOutcome) => {
+    const current = getState();
+    const palMessages = { ...current.palMessages };
+    if (outcome.kind === 'measured') {
+      delete palMessages[model];
+      const palResults = addPalResult(current.palResults, outcome.result);
+      set({ palResults, palMessages, saveFailed: !savePal(palResults) });
+    } else {
+      palMessages[model] = outcome.message;
+      set({ palMessages });
+    }
+  };
+
+  const checkPal = async (model: string) => {
+    const run = bridge.runPalCheck;
+    if (!run || rigScoreBusy(getState())) return;
+    stopRequested = false;
+    unlistenPal ??= bridge.onPalProgress?.((update) => {
+      if (update.id === getState().pal?.progressId) set({ palProgress: update });
+    }) ?? null;
+    const progressId = `pal-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+    const palMessages = { ...getState().palMessages };
+    delete palMessages[model];
+    set({ pal: { model, progressId }, palProgress: null, palMessages });
+    let outcome: PalOutcome;
+    try {
+      outcome = assemblePalResult(model, await run(palRequest(model, progressId)), now());
+    } catch (error) {
+      outcome = { kind: 'failed', message: `The check did not finish: ${getErrorMessage(error)}` };
+    }
+    recordPal(model, outcome);
+    set({ pal: null, palProgress: null });
+  };
+
   const stop = () => {
     const current = getState();
-    const progressId = current.running?.progressId ?? current.endurance?.progressId;
+    const progressId = current.running?.progressId ?? current.endurance?.progressId ?? current.pal?.progressId;
     if (!progressId) return;
     stopRequested = true;
     void bridge.cancelRigScore?.(progressId);
@@ -229,6 +285,7 @@ export function createRigSession(
     },
     runTiers,
     checkContext,
+    checkPal,
     stop,
     reloadSaved: () => set({
       history: (options.loadHistory ?? readRigHistory)(),

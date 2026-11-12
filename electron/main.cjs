@@ -35,6 +35,7 @@ const { scoreQualityWithJudge } = require('./judgeScoring.cjs');
 const { DRAWING_ANSWER_TOKENS, DRAWING_TIMEOUT_MS, checkDrawing, drawingTimedOut, drawingJudgeMode, drawingNote } = require('./drawingRound.cjs');
 const { noteStillReleasing, runRigTier, unloadOllamaModel } = require('./rigScoreRunner.cjs');
 const { runEndurance } = require('./enduranceRunner.cjs');
+const { runPalCheck } = require('./palCheckRunner.cjs');
 const { fitFromPc, loadedFootprint } = require('./matchFit.cjs');
 const { localRequest } = require('./localHttp.cjs');
 const { gradeFor, totalsFromPrompts } = require('./benchmarkTotals.cjs');
@@ -1171,6 +1172,7 @@ function registerHandlers() {
   });
   handleLogged('rigscore:run', 'rigscore', (event, request) => runRigScore(request, event.sender));
   handleLogged('endurance:run', 'rigscore', (event, request) => runContextEndurance(request, event.sender));
+  handleLogged('pal:run', 'rigscore', (event, request) => runPalConversation(request, event.sender));
   ipcMain.handle('rigscore:cancel', (event, progressId) => {
     assertTrustedIpcSender(event);
     if (typeof progressId === 'string' && progressId && activeRigScore?.progressId === progressId) {
@@ -3590,6 +3592,42 @@ async function runContextEndurance(request = {}, sender) {
       signal: activeRigScore.abort.signal,
       onProgress: (update) => {
         if (!sender.isDestroyed()) sender.send('endurance:progress', { id: progressId, ...update });
+      },
+    });
+  } finally {
+    activeRigScore = null;
+    finished();
+  }
+}
+
+/**
+ * The pal check on the local Ollama (palCheckRunner.cjs): one model plays a
+ * person in a short chat. It loads a model, so it holds the speed test's slot
+ * like the context check, and Stop is the same rigscore:cancel.
+ */
+async function runPalConversation(request = {}, sender) {
+  if (benchmarkRunning) throw new Error('A test is running. The pal check waits until it has finished.');
+  if (activeRigScore) throw new Error('A speed test or check is already running.');
+  const progressId = typeof request?.progressId === 'string' && request.progressId
+    ? request.progressId
+    : `pal-${Date.now().toString(36)}`;
+  let finished;
+  activeRigScore = { progressId, abort: new AbortController(), finished: new Promise((resolve) => { finished = resolve; }) };
+  try {
+    return await runPalCheck({
+      request,
+      baseUrl: OLLAMA_LOCAL_URL,
+      fetchJson,
+      readMachine: readRigMachine,
+      unloadModel: unloadBenchmarkModel,
+      beforeRun: async () => {
+        await releaseOllamaLabModels();
+        await releaseOllamaChatModels();
+      },
+      isUnsupportedThinkError,
+      signal: activeRigScore.abort.signal,
+      onProgress: (update) => {
+        if (!sender.isDestroyed()) sender.send('pal:progress', { id: progressId, ...update });
       },
     });
   } finally {

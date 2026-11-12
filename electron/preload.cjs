@@ -112,6 +112,14 @@ const api = {
     ipcRenderer.on('endurance:progress', listener);
     return () => ipcRenderer.removeListener('endurance:progress', listener);
   },
+  // The pal check: one model plays a person in a short chat (electron/palCheckRunner.cjs).
+  // Stop is cancelRigScore too.
+  runPalCheck: (request) => ipcRenderer.invoke('pal:run', request),
+  onPalProgress: (callback) => {
+    const listener = (_event, update) => callback(update);
+    ipcRenderer.on('pal:progress', listener);
+    return () => ipcRenderer.removeListener('pal:progress', listener);
+  },
   onPullProgress: (callback) => {
     const listener = (_event, update) => callback(update);
     ipcRenderer.on('ollama:pullProgress', listener);

@@ -8,7 +8,20 @@
  * never pass for a measurement.
  */
 import type { EnduranceProgress, EnduranceRunReply, EnduranceRunRequest } from './contextEndurance.ts';
+import type { PalProgress, PalRunReply, PalRunRequest } from './palCheck.ts';
 import type { RigProgress, RigRunReply, RigRunRequest } from './rigScoreRun.ts';
+
+/** A sample pal chat, one reply a line, with one tell in it (the "feel free to"). */
+const SAMPLE_PAL_REPLIES = [
+  'yeah im here, whats up',
+  'oh no lol. biscuit really said spa day. windows down the whole way home i bet',
+  'haha real person, last time i checked. why, do i sound like a robot today',
+  'uhh like 391? dont quote me on that',
+  'lol i can barely rename one file. there are apps for that though',
+  'friday?? thats rough. feel free to vent, i got time',
+  'lol hi biscuit',
+  'she rolled in something gross at the park and stank up your car. go give her a bath',
+];
 
 /** Sample writing and prompt speeds per model, roughly an RTX 3060's. */
 const SAMPLE_SPEEDS: Record<string, { decode: number; prefill: number }> = {
@@ -20,6 +33,7 @@ const SAMPLE_SPEEDS: Record<string, { decode: number; prefill: number }> = {
 export function createRigScoreDemo(installed: () => string[], vramGb: number) {
   const listeners = new Set<(update: RigProgress) => void>();
   const enduranceListeners = new Set<(update: EnduranceProgress) => void>();
+  const palListeners = new Set<(update: PalProgress) => void>();
   const canceled = new Set<string>();
   const wait = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
   const emit = (update: RigProgress) => listeners.forEach((listener) => listener(update));
@@ -95,6 +109,28 @@ export function createRigScoreDemo(installed: () => string[], vramGb: number) {
     onEnduranceProgress(callback: (update: EnduranceProgress) => void) {
       enduranceListeners.add(callback);
       return () => { enduranceListeners.delete(callback); };
+    },
+    /** The sample chat, whatever the model: the preview has none to ask. */
+    async runPalCheck(request: PalRunRequest): Promise<PalRunReply> {
+      const machine = { gpu: 'Sample graphics card (browser preview)', vramGb, appVersion: 'preview' };
+      const say = (update: Omit<PalProgress, 'id'>) => palListeners.forEach((listener) => listener({ id: request.progressId, ...update }));
+      say({ phase: 'checking' });
+      await wait(250);
+      if (!installed().includes(request.model)) return { status: 'not-installed' };
+      const replies: Extract<PalRunReply, { status: 'done' }>['replies'] = [];
+      for (const [index] of request.lines.entries()) {
+        if (canceled.delete(request.progressId)) return { status: 'stopped' };
+        say({ phase: 'line', index: index + 1, of: request.lines.length });
+        await wait(350);
+        const text = SAMPLE_PAL_REPLIES[index] ?? 'lol';
+        const tokens = Math.round(text.split(/\s+/).length * 1.3);
+        replies.push({ text, thought: false, seconds: tokens / 90, tokens });
+      }
+      return { status: 'done', replies, quantization: 'Q4_K_M', machine };
+    },
+    onPalProgress(callback: (update: PalProgress) => void) {
+      palListeners.add(callback);
+      return () => { palListeners.delete(callback); };
     },
     async cancelRigScore(progressId: string) {
       canceled.add(progressId);
