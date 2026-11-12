@@ -3,6 +3,25 @@ import type { ReleaseNoteEntry } from '../components/UpdateCenter';
 
 export const releaseNotes: ReleaseNoteEntry[] = [
   {
+    version: '0.11.2',
+    label: 'Nothing Lost',
+    date: 'Beta build',
+    notes: [
+      'Your in-app chats are kept when you restart with no saved scores, or after "Clear all scores". They used to be dropped when RigMatch opened, and an empty chat was saved over them.',
+      'On a Mac or a Jetson, a model of 32B or more that is too big for your memory is graded F, "Too big", again. 0.11.1 let some of them, like codellama:34b, show as a downloadable C, "Tight fit".',
+      'Picture and audio model sizes are now in the same GB as everything else, so SDXL Turbo fits a 6 GB graphics card again, and Z-Image and FLUX.2 klein no longer read as a tight fit on 10 GB. phi3:mini is 2.0 GB everywhere; three "Start here" picks said 2.3 GB.',
+      '"Run all" on the Speed score no longer stops to say another program is using your graphics card when the model is RigMatch\'s own and still unloading. It now waits up to 15 seconds for it, as rigmatch-fit does.',
+      'The context check no longer counts RigMatch\'s own leftover chat or Labs model as another program on the card, and no longer says the whole model stayed on the graphics card when no reading came back.',
+      'Clear Data now clears your Speed score and context check results for good. They used to come back on the next run.',
+      '"Test this question again" refuses when a storage-full save dropped the question\'s text. It used to run the whole default test and save the wrong answer in its place. When storage is full, RigMatch now says which part of your history it dropped.',
+      'A tie on a task score, for "Best for" and the goal crowns, now goes to the model with the better Match Score instead of the one saved first. Top Match also leaves out scores measured on another computer or graphics card, as the grades and crowns already did.',
+      'RigMatch Chat keeps your newest messages if a save fails once, for example while antivirus or a sync tool holds the file. The personality box now stops at its 4,000-character limit and says so; text past it used to disappear after a restart.',
+      'The Windows installer now asks which apps to install before it installs them. The question used to come after the install had finished, so RigChat\'s shortcuts were never made, and every install and update deleted the RigMatch desktop shortcut. Updates from inside RigMatch now leave your shortcuts as they are and don\'t ask. If RigChat\'s shortcuts are missing, download this version\'s installer and run it: it asks, and makes them.',
+      'rigmatch-fit --endurance refuses embedding models, as the app does.',
+      'RigMatch\'s list of what each Ollama model can do is refreshed for 272 families, including ripple-preview, a 65B coding model. Two cloud-only models Ollama no longer lists are gone from it.',
+    ],
+  },
+  {
     version: '0.11.1',
     label: 'Sizes That Add Up',
     date: 'Beta build',
