@@ -28,6 +28,12 @@
     Var HwndCheckChat
 
     Function rm_AppSelectShow
+      ; An in-app update runs this installer with --updated, and keeps the
+      ; shortcuts as they are, so it doesn't ask. Abort here skips the page.
+      ${If} ${isUpdated}
+        Abort
+      ${EndIf}
+
       nsDialogs::Create 1018
       Pop $0
       ${If} $0 == error
