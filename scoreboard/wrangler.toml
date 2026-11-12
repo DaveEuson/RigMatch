@@ -1,0 +1,23 @@
+# RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
+# The scoreboard's Cloudflare Worker. Setup steps: scoreboard/README.md.
+
+name = "rigmatch-scoreboard"
+main = "worker.ts"
+compatibility_date = "2026-10-01"
+workers_dev = true
+
+[[d1_databases]]
+binding = "DB"
+database_name = "rigmatch-scoreboard"
+# Printed by `wrangler d1 create rigmatch-scoreboard` (README step 3).
+database_id = "PASTE-THE-DATABASE-ID-HERE"
+migrations_dir = "migrations"
+
+# 00:05 UTC every day: delete yesterday's send counts (PRIVACY.md).
+[triggers]
+crons = ["5 0 * * *"]
+
+# No request logs: Cloudflare would otherwise be able to keep each request,
+# address included, for the dashboard.
+[observability]
+enabled = false
