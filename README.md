@@ -217,15 +217,17 @@ npx rigmatch-fit
 
 It needs Node 20 or newer. To run it from a clone of this repo instead: `npm install`, `npm run build:cli`, then `node cli/dist/rigmatch-fit.mjs`.
 
+The top of the list on an RTX 4070 with 12 GB:
+
 ```text
-Grade  Model             Size    Speed      Fit         Command
-A      qwen3.5:9b *      6.1 GB  ~49 tok/s  Sweet spot  ollama run qwen3.5:9b
-A      qwen3-vl:8b       5.7 GB  ~53 tok/s  Sweet spot  ollama pull qwen3-vl:8b
-A      mistral-nemo:12b  6.6 GB  ~46 tok/s  Sweet spot  ollama pull mistral-nemo:12b
-A      ministral-3:8b    5.6 GB  ~54 tok/s  Sweet spot  ollama pull ministral-3:8b
-A      qwen3:8b *        4.9 GB  ~61 tok/s  Sweet spot  ollama run qwen3:8b
+Grade  Model               Size    Speed      Fit         Command
+A      mimo-v2.6:9b        6.1 GB  ~49 tok/s  Sweet spot  ollama pull mimo-v2.6:9b
+A      ornith-1.5:9b       6.1 GB  ~49 tok/s  Sweet spot  ollama pull ornith-1.5:9b
+A      qwen3.5:9b *        6.1 GB  ~49 tok/s  Sweet spot  ollama run qwen3.5:9b
+A      qwen3-vl:8b         5.8 GB  ~52 tok/s  Sweet spot  ollama pull qwen3-vl:8b
+A      mistral-nemo:12b *  6.6 GB  ~46 tok/s  Sweet spot  ollama run mistral-nemo:latest
 ...
-The best 20 of 202 models that run here.
+The best 20 of 212 models that run here.
 ```
 
 Models marked `*` are already in your Ollama, so their command is `ollama run`.
