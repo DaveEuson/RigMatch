@@ -4,7 +4,7 @@ Use this before tagging or publishing a beta release.
 
 ## Build prerequisites
 
-- Node.js 24.x — the release workflow pins setup-node to 24, and the scoring tests import a .ts module directly
+- Node.js 24.x (the release workflow pins setup-node to 24, and the scoring tests import a .ts module directly)
 - Rust stable toolchain for RigMatch Chat
 - Ollama installed locally for smoke tests
 - Platform-specific build host for each installer target
@@ -32,7 +32,7 @@ npm run compare:ollama-speed -- --model qwen3:1.7b
 ```
 
 **Use `npm run typecheck`, never `tsc -p tsconfig.json`.** The root config is a
-solution file — `"files": []` with references — so `-p` type-checks *nothing*
+solution file (`"files": []` with references), so `-p` type-checks *nothing*
 and exits 0. It looks exactly like a clean run. `typecheck` is `tsc -b`, which
 builds the referenced projects; `tsc -b --force` when you want to be sure an
 incremental cache is not answering for you.
@@ -43,6 +43,11 @@ code that exists twice and drifted, a claim in the source that stopped matching
 reality, a window that does not fit the screen. They were added over 0.6 and 0.7
 and were missing from this list, which is how the list came to describe a
 smaller release process than the one actually run.
+
+If `qwen3:1.7b` is not installed, any small installed thinking model (for
+example `qwen3.5:0.8b`) covers the same thinking-mode check. The smoke must
+show the empty answers from default mode coming back as real answers in
+RigMatch mode.
 
 Refresh what RigMatch knows about each Ollama model before building, and
 commit the result if it changed:
@@ -62,9 +67,6 @@ After packaging, confirm the build contains what was committed:
 ```bash
 node scripts/verify-package.mjs release/win-unpacked/resources/app.asar
 ```
-
-If `qwen3:1.7b` is not installed, any small installed thinking model (for example `qwen3.5:0.8b`) covers the same
-thinking-mode regression check — the smoke must show default-mode empty answers being rescued in RigMatch mode.
 
 For installers, build on the matching OS:
 
@@ -140,7 +142,7 @@ git diff "$(git describe --tags --abbrev=0)" -- src/lib/scoring.ts src/lib/rigSc
 - The release body includes the macOS unsigned beta first-launch note. It goes out the moment the tag is pushed, so it has to be right beforehand.
 - `SHA256SUMS.txt` is generated and uploaded with the release.
 - The nested `RigMatch.AI-main/` scratch folder is not committed or included.
-- **Artifacts are NOT drafts.** The workflow publishes on a `v*` tag with `draft: false`, and anything not matching nightly/alpha/canary/preview is marked Latest immediately. Smoke-test before tagging, not after. To build without publishing, run the workflow via `workflow_dispatch` — the release job is gated on `refs/tags/`, so it produces artifacts and publishes nothing. Then run the install smoke on that build's artifacts, still before tagging: `gh workflow run post-release-install-smoke.yml -f run_id=<that run's id>`. After publishing, run it again with `-f tag=<tag>`: a release made by the workflow does not start it.
+- **Artifacts are NOT drafts.** The workflow publishes on a `v*` tag with `draft: false`, and anything not matching nightly/alpha/canary/preview is marked Latest immediately. Smoke-test before tagging, not after. To build without publishing, run the workflow via `workflow_dispatch`. The release job is gated on `refs/tags/`, so that run produces artifacts and publishes nothing. Then run the install smoke on that build's artifacts, still before tagging: `gh workflow run post-release-install-smoke.yml -f run_id=<that run's id>`. After publishing, run it again with `-f tag=<tag>`: a release made by the workflow does not start it.
 - **After publishing, `rigmatch-fit` goes to npm from the same tag.** Dave does this himself (it needs his npm sign-in and 2FA): follow `docs/publishing-cli.md`.
 
 ## Logs for beta reports
