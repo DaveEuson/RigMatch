@@ -204,9 +204,24 @@ test('shared memory is described as shared, and a model past its share is a C at
   assert.equal(over.fit.tone, 'good');
   assert.equal(over.verdict, 'barely-runs');
   assert.ok(over.points <= 69, `${over.letter} ${over.points}`);
-  assert.equal(over.reasons[0], 'Needs more of your 16 GB of shared memory than a model can have beside the system, so it will be slow');
+  assert.equal(over.reasons[0], 'Needs more of your 16 GB of shared memory than a model can have beside the system, which slows it down');
   const within = gradeModel(row('x:20b', '20B', 11), mac);
   assert.ok(over.tokensPerSecond < within.tokensPerSecond * 0.75, `spills: ${over.tokensPerSecond} vs ${within.tokensPerSecond}`);
+});
+
+test('past its share of shared memory, the fit never calls a model slow beside a speed that is not', () => {
+  // lfm2:24b on a 16 GB Apple M4 (2026-11-18): "so it will be slow · about 30
+  // words a second". It is a mixture of experts, so the part squeezed out of
+  // memory costs it less, and the estimate beside the fit already counts that.
+  const mac = { gpu: 'Apple M4', vramGb: 16, unifiedMemory: true };
+  const moe = catalogRows().find((listed) => listed.name === 'lfm2:24b');
+  assert.ok(moe?.sizeGb > 16 * 0.7 && moe.sizeGb < 16, `the shipped lfm2:24b is ${moe?.sizeGb} GB`);
+  for (const graded of [gradeModel(moe, mac), gradeModel({ ...moe, fitOverride: unifiedMemoryFit(moe, mac) }, mac)]) {
+    assert.ok(graded.tokensPerSecond > 20, `estimated at ${graded.tokensPerSecond} tok/s`);
+    assert.match(graded.reasons[0], /^Needs more of your 16 GB of shared memory than a model can have beside the system, which slows it down$/);
+    assert.doesNotMatch(graded.summary, /will be slow/);
+  }
+  assert.equal(unifiedMemoryFit(moe, mac).tone, 'tight');
 });
 
 test('on the processor, a measured speed is used, not called one and ignored', () => {

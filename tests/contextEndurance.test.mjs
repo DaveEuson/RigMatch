@@ -317,6 +317,25 @@ test('a prompt Ollama cut is marked as the wrong size, not as the model forgetti
   }
 });
 
+test('a context reading smaller than the prompt it held is not a cut prompt', () => {
+  // An Apple M4 on Ollama's MLX runner (0.40.16, 2026-11-18): the runner took
+  // the bigger context without loading the model again, and /api/ps went on
+  // reporting the 2K it was first loaded with. The 8K and 16K prompts went in
+  // whole (6,221 and 14,667 tokens, passkey kept), under a note that said
+  // Ollama had cut them to 2K. The prompt sizes, the 2K readings and the 0 s
+  // loads are that run's; the speeds stand in for it.
+  const result = resultOf([
+    readingOf(ENDURANCE_STAGES[0], [300, 900, 39, 4, 1, 2048]),
+    readingOf(ENDURANCE_STAGES[1], [6221, 900, 30, 0, 1, 2048]),
+    readingOf(ENDURANCE_STAGES[2], [14667, 900, 24, 0, 1, 2048]),
+  ]);
+  assert.deepEqual(result.stages.map((stage) => stage.sizeOk), [true, true, true]);
+  assert.deepEqual(result.stages.map((stage) => stage.contextShort), [false, false, false]);
+  assert.deepEqual(result.stages.map((stage) => stage.contextReported), [2048, 2048, 2048], 'the reading itself is kept as Ollama gave it');
+  assert.doesNotMatch(result.verdict.notes.join(' '), /gave the model a context/);
+  assert.equal(result.verdict.kind, 'holds');
+});
+
 test('the verdict from a full run: speed kept, spill and a forgotten passkey are each found', async () => {
   const fake = await fakeOllama({
     installed: [MODEL],

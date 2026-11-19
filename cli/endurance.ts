@@ -209,7 +209,7 @@ export function formatEnduranceReport(report: EnduranceReport, { show = false, c
     ...verdict.notes,
     describeBaseline(result.baseline),
     ...afterNote(report.card?.after),
-    `Writing is how fast the answer comes out; reading is how fast the prompt goes in. Each size loads the model again, so loading is timed on its own and left out of both speeds. The passkey is hidden 55% of the way into the prompt.`,
+    `Writing is how fast the answer comes out; reading is how fast the prompt goes in. Loading is timed on its own and left out of both speeds. The passkey is hidden 55% of the way into the prompt.`,
     `A size is flagged when writing falls under ${Math.round(ENDURANCE_SPEED_KEPT_MIN * 100)}% of the ${contextLabel(ENDURANCE_STAGES[0].numCtx)} speed, less than ${Math.round(ENDURANCE_ON_CARD_MIN * 100)}% of the model sits on the graphics card, or the passkey is lost. Those cut-offs were set on three models on one card (an RTX 4070 12 GB), so treat the verdict as a guide.`,
   ].filter(Boolean);
   lines.push(...prose.flatMap((text) => wrap(text, columns)));
