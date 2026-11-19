@@ -163,6 +163,10 @@ test('in a terminal it is a show; piped it is plain; both are ASCII, and the pro
     assert.match(plain.out, /Before the check the graphics card had 14% of its memory in use and 29% busy\./);
     assert.match(plain.out, /Those cut-offs were set on three models on one card \(an RTX 4070 12 GB\), so treat the verdict as a guide\./);
     assert.match(plain.out, /A size is flagged when writing falls under 55% of the 2K speed, less than 92% of the model sits on the graphics card, or the passkey is lost\./);
+    // Not "Each size loads the model again": Ollama's MLX runner on a Mac does
+    // not, and that sentence sat above two rows that read "Loads in 0.0 s".
+    assert.match(plain.out, /Loading is timed on its own and left out of both speeds\./);
+    assert.doesNotMatch(plain.out, /loads the model again/);
     assert.match(plain.err, /qwen3:14b: checking Ollama\nqwen3:14b: loading, and measuring how many tokens a line costs on this model\nqwen3:14b: Quick chat, 2K context \(1 of 3\)/);
     assert.match(plain.err, /qwen3:14b: unloading/);
     assert.match(plain.err, ascii);

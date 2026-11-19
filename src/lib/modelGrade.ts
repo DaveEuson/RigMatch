@@ -392,7 +392,10 @@ export function unifiedMemoryFit(row: GradeRow, hardware: GradeHardware): Hardwa
     : {
       tone: 'tight',
       label: `Tight fit · ${formatGb(row.sizeGb)}`,
-      detail: `Needs more of your ${memory} than a model can have beside the system, so it will be slow`,
+      // "Slows it down", not "so it will be slow": the speed beside this
+      // already counts the squeeze, and for a mixture of experts it can still
+      // be fast. lfm2:24b read "so it will be slow · about 30 words a second".
+      detail: `Needs more of your ${memory} than a model can have beside the system, which slows it down`,
       recommend: true,
     };
 }
@@ -499,7 +502,8 @@ function fitReason(row: GradeRow, fit: HardwareFit, hardware: GradeHardware, spa
     const size = row.sizeGb ?? 0;
     if (size > hardware.vramGb) return `Bigger than your ${memory}, so it will be slow`;
     if (size > hardware.vramGb * UNIFIED_USABLE_SHARE) {
-      return `Needs more of your ${memory} than a model can have beside the system, so it will be slow`;
+      // The same words as unifiedMemoryFit's, for a row graded without it.
+      return `Needs more of your ${memory} than a model can have beside the system, which slows it down`;
     }
     return fit.tone === 'tight' || (spareGb ?? 0) < 1
       ? `Fits, but leaves little of your ${memory} for other apps`

@@ -184,8 +184,14 @@ export type EnduranceStage = {
   loadSeconds: number;
   /** Share of the model on the graphics card, 0 to 1. */
   gpuShare: number | null;
+  /** The context /api/ps reports for the loaded model, as Ollama gave it. */
   contextReported: number | null;
-  /** Ollama gave the model a smaller context than was asked for (OLLAMA_NUM_PARALLEL above 1 splits it). */
+  /**
+   * Ollama gave the model a smaller context than was asked for
+   * (OLLAMA_NUM_PARALLEL above 1 splits it). Not said when the prompt went in
+   * at the size meant and is bigger than the context Ollama reports: the
+   * report is then not the context it ran in.
+   */
   contextShort: boolean;
   passkeyKept: boolean;
   /** The prompt Ollama counted was near the size meant. If not, the stage says nothing about the model. */
@@ -371,19 +377,29 @@ function problem(stage: EnduranceStage, reasons: Reason[], heldTo: EnduranceStag
 
 function toStage(reading: EnduranceStageReading, label: string): EnduranceStage {
   const writing = reading.writingTps ?? null;
+  const promptTokens = reading.promptTokens ?? 0;
+  const reported = reading.contextReported ?? null;
+  // Ollama's MLX runner takes a bigger context without loading the model
+  // again, and /api/ps goes on reporting the one it was first loaded with. On
+  // an Apple M4 the 8K and 16K prompts went in whole, 6,221 and 14,667
+  // tokens, under a note that said Ollama had cut them to 2K. A prompt that
+  // really was cut comes back near the context's own size, far from the size
+  // meant, so sizeOk tells the two apart.
+  const wentInWhole = Boolean(reading.sizeOk) && reported !== null && promptTokens > reported;
+  const contextShort = Boolean(reported && reported < reading.numCtx && !wentInWhole);
   return {
     id: reading.id,
     label,
     numCtx: reading.numCtx,
     targetTokens: reading.targetTokens,
     status: reading.status,
-    promptTokens: reading.promptTokens ?? 0,
+    promptTokens,
     writingTps: writing,
     readingTps: reading.readingTps ?? null,
     loadSeconds: reading.loadSeconds ?? 0,
     gpuShare: reading.gpuShare ?? null,
-    contextReported: reading.contextReported ?? null,
-    contextShort: Boolean(reading.contextReported && reading.contextReported < reading.numCtx),
+    contextReported: reported,
+    contextShort,
     passkeyKept: Boolean(reading.passkeyKept),
     sizeOk: Boolean(reading.sizeOk),
     feels: writing ? speedBand(writing).label : null,
