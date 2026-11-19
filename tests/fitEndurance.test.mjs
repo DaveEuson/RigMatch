@@ -96,7 +96,7 @@ test('--endurance --json: the stages, the verdict and the stamp, and what it loa
     assert.deepEqual([json.tool, json.mode, json.model, json.status, json.version], ['rigmatch-fit', 'endurance', MODEL, 'measured', '0.1.0']);
     assert.deepEqual(json.hardware, { gpu: 'NVIDIA GeForce RTX 4070', vramGb: 12, unifiedMemory: false, ramGb: 32, platform: 'win32', arch: 'x64' });
     assert.deepEqual(json.test.stages.map((stage) => [stage.id, stage.label, stage.numCtx]), [['quick', 'Quick chat', 2048], ['page', 'Long page', 8192], ['project', 'Whole project', 16384]]);
-    assert.deepEqual(json.test.thresholds, { speedKeptMin: 0.55, onCardMin: 0.92 });
+    assert.deepEqual(json.test.thresholds, { speedKeptMin: 0.5, onCardMin: 0.92 });
     assert.equal(json.test.numPredict, 128);
     assert.deepEqual(Object.keys(json.stages[0]), [
       'id', 'label', 'numCtx', 'status', 'targetTokens', 'promptTokens', 'sizeOk', 'writingTps', 'readingTps', 'writingKept', 'loadSeconds', 'gpuShare',
@@ -154,7 +154,7 @@ test('in a terminal it is a show; piped it is plain; both are ASCII, and the pro
     assert.equal(plain.code, 0);
     assert.doesNotMatch(plain.out, /o-\*-o|Tonight|Endurance round/);
     assert.match(plain.out, /^RigMatch context endurance: qwen3:14b\nNVIDIA GeForce RTX 4070, 12 GB graphics memory, 32 GB system memory\n\n/);
-    assert.match(plain.out, /^Stage\s+Context\s+Prompt\s+Writing\s+Reading\s+Loads in\s+On the card\s+Passkey\s+Feels$/m);
+    assert.match(plain.out, /^Stage\s+Context\s+Prompt\s+Writing\s+Reading\s+Loads in\s+On GPU\s+Passkey\s+Feels$/m);
     assert.match(plain.out, /^Quick chat\s+2K\s+\d+\s+43 tok\/s\s+1,345 tok\/s\s+6\.0 s\s+100%\s+kept\s+Fast$/m);
     assert.match(plain.out, /^Long page\s+8K\s+[\d,]+\s+38 tok\/s\s+2,021 tok\/s\s+2\.0 s\s+100%\s+kept\s+Fast$/m);
     assert.match(plain.out, /^Whole project\s+16K\s+[\d,]+\s+13 tok\/s\s+394 tok\/s\s+2\.0 s\s+87%\s+kept\s+Usable$/m);
@@ -162,7 +162,7 @@ test('in a terminal it is a show; piped it is plain; both are ASCII, and the pro
     assert.match(plain.out, /At 16K it writes at 13 tok\/s, 31% of its 2K speed\./);
     assert.match(plain.out, /Before the check the graphics card had 14% of its memory in use and 29% busy\./);
     assert.match(plain.out, /Those cut-offs were set on three models on one card \(an RTX 4070 12 GB\), so treat the verdict as a guide\./);
-    assert.match(plain.out, /A size is flagged when writing falls under 55% of the 2K speed, less than 92% of the model sits on the graphics card, or the passkey is lost\./);
+    assert.match(plain.out, /A size is flagged when writing falls under 50% of the 2K speed, less than 92% of the model sits on the graphics card, or the passkey is lost\./);
     // Not "Each size loads the model again": Ollama's MLX runner on a Mac does
     // not, and that sentence sat above two rows that read "Loads in 0.0 s".
     assert.match(plain.out, /Loading is timed on its own and left out of both speeds\./);
@@ -235,7 +235,7 @@ test('another program\'s model is never run beside: the command refuses, and lea
   try {
     const run = await runCommand({ model: MODEL, json: false }, ollama);
     assert.equal(run.code, undefined);
-    assert.match(run.error.message, /Ollama has mistral:7b loaded by another program\. It shares the graphics card and would slow the check, so rigmatch-fit leaves it alone and does not start\./);
+    assert.match(run.error.message, /Ollama has mistral:7b loaded by another program\. It shares the GPU and would slow the check, so rigmatch-fit leaves it alone and does not start\./);
     assert.deepEqual(ollama.loads(), []);
     assert.deepEqual(ollama.unloads(), []);
     assert.deepEqual(ollama.state.loaded.map((entry) => entry.name), ['mistral:7b']);
@@ -300,13 +300,36 @@ test('Ctrl+C mid-run stops it, unloads the model and exits 130; a second Ctrl+C 
 
   const again = await fakeOllama({ installed: [MODEL], stall: true });
   try {
-    const { interrupt, finished } = startCommand({ model: MODEL, json: false }, again);
+    let clock = 0;
+    const { interrupt, finished } = startCommand({ model: MODEL, json: false }, again, { env: { now: () => clock } });
     await again.waitForStall();
     interrupt.emit('SIGINT');
+    clock = 1500;
     interrupt.emit('SIGINT');
     assert.equal((await finished).left(), 130, 'the second press leaves');
   } finally {
     await again.close();
+  }
+});
+
+test('one Ctrl+C that arrives twice, as it does through npx, still unloads the model', async () => {
+  // The terminal signals node and npx, and npx passes its own on: on an Apple
+  // M4 the model stayed loaded under "Stopping: unloading the model...".
+  const ollama = await fakeOllama({ installed: [MODEL], stall: true });
+  try {
+    let clock = 0;
+    const { interrupt, finished } = startCommand({ model: MODEL, json: false }, ollama, { env: { now: () => clock } });
+    await ollama.waitForStall();
+    interrupt.emit('SIGINT');
+    clock = 40;
+    interrupt.emit('SIGINT');
+    const run = await finished;
+    assert.equal(run.code, 130);
+    assert.equal(run.left(), null, 'the echo is not a second press');
+    assert.deepEqual(ollama.unloads(), [MODEL]);
+    assert.deepEqual(ollama.state.loaded, [], 'the card is empty');
+  } finally {
+    await ollama.close();
   }
 });
 
@@ -362,7 +385,7 @@ test('bad flags exit 1 with a plain sentence, before anything is asked of Ollama
   assert.match(down.stderr, /Ollama did not answer at http:\/\/127\.0\.0\.1:9\. --endurance runs the model on it/);
   const help = await runCli(['--help'], {});
   assert.match(help.stdout, /--endurance <model>\s+Find where one installed model slows down or loses its place as/);
-  assert.match(help.stdout, /needs Ollama: LM Studio does\s+not say how much of a model is on the card/);
+  assert.match(help.stdout, /needs Ollama: LM Studio does not\s+say how much of a model is on the GPU/);
 });
 
 test('the command refuses while another program has a model loaded, and never unloads it', async () => {
@@ -371,8 +394,15 @@ test('the command refuses while another program has a model loaded, and never un
     for (const args of [['--endurance', MODEL], ['--endurance', MODEL, '--json']]) {
       const result = await runCli(args, { OLLAMA_HOST: ollama.host });
       assert.equal(result.code, 1, args.join(' '));
-      assert.match(result.stderr, /Ollama has mistral:7b loaded by another program\. It shares the graphics card and would slow the check/);
-      assert.equal(result.stdout, '');
+      const said = /Ollama has mistral:7b loaded by another program\. It shares the GPU and would slow the check/;
+      if (args.includes('--json')) {
+        // A script that asked for JSON gets its error as JSON too.
+        assert.match(JSON.parse(result.stdout).error, said);
+        assert.equal(result.stderr, '');
+      } else {
+        assert.match(result.stderr, said);
+        assert.equal(result.stdout, '');
+      }
     }
     assert.equal(ollama.calls.filter((call) => call.path === '/api/generate').length, 0, 'nothing run, nothing unloaded');
     assert.deepEqual(ollama.state.loaded.map((entry) => entry.name), ['mistral:7b']);

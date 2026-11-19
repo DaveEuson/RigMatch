@@ -51,8 +51,18 @@ export const ENDURANCE_STAGES: readonly EnduranceStageDef[] = [
 /** Enough for the passkey and a short summary. */
 export const ENDURANCE_NUM_PREDICT = 128;
 
-/** The first stage whose writing speed is under this share of the 2K speed is flagged. */
-export const ENDURANCE_SPEED_KEPT_MIN = 0.55;
+/**
+ * The first stage whose writing speed is under this share of the 2K speed is
+ * flagged. It was 55%, and readings sit close to it: on an Apple M4 gemma4
+ * kept 54% one day and 57% the next, and llama3.2:3b 53%, so the headline
+ * flipped between "Slows down past 8K" and "Holds up to 16K" on noise.
+ */
+export const ENDURANCE_SPEED_KEPT_MIN = 0.5;
+/**
+ * Up to this share a size that holds is said to write a little slower, so a
+ * reading either side of the line above reads much the same.
+ */
+export const ENDURANCE_SPEED_NEAR_MAX = 0.6;
 /** The first stage with less than this share of the model on the graphics card is flagged. */
 export const ENDURANCE_ON_CARD_MIN = 0.92;
 
@@ -277,7 +287,8 @@ type Reason = 'slow' | 'spill' | 'lost';
  * card, or the hidden passkey did not come back. A stage whose prompt came out
  * the wrong size is left out and said so: it is not the model's failure.
  */
-export function enduranceVerdict(stages: readonly EnduranceStage[]): EnduranceVerdict {
+export function enduranceVerdict(stages: readonly EnduranceStage[], { sharedMemory = false }: { sharedMemory?: boolean } = {}): EnduranceVerdict {
+  const words = placeWords(sharedMemory);
   const base = stages[0];
   const unchecked = (detail: string, notes: string[] = []): EnduranceVerdict => ({
     kind: 'unchecked', problemStage: null, heldTo: null, headline: 'Could not check this model', detail, notes,
@@ -318,7 +329,7 @@ export function enduranceVerdict(stages: readonly EnduranceStage[]): EnduranceVe
     if (kept !== null && kept < ENDURANCE_SPEED_KEPT_MIN) reasons.push('slow');
     if (stage.gpuShare !== null && stage.gpuShare < ENDURANCE_ON_CARD_MIN) reasons.push('spill');
     if (!stage.passkeyKept) reasons.push('lost');
-    if (reasons.length) return problem(stage, reasons, heldTo, base, kept, notes);
+    if (reasons.length) return problem(stage, reasons, heldTo, base, kept, notes, words);
     heldTo = stage;
   }
 
@@ -331,22 +342,35 @@ export function enduranceVerdict(stages: readonly EnduranceStage[]): EnduranceVe
   // said only when every size was read.
   const shares = checked.map((stage) => stage.gpuShare);
   const lowestShare = shares.every((share): share is number => share !== null) ? Math.min(...shares) : null;
+  const keptShares = checked.filter((stage) => stage !== base && stage.writingTps).map((stage) => (stage.writingTps ?? 0) / (base.writingTps ?? 1));
+  const slower = keptShares.length > 0 && Math.min(...keptShares) < ENDURANCE_SPEED_NEAR_MAX;
   return {
     kind: 'holds',
     problemStage: null,
     heldTo: last.numCtx,
-    headline: `Holds up to ${contextLabel(last.numCtx)} on your card${left.length ? `, ${listNames(left.map((stage) => contextLabel(stage.numCtx)))} not checked` : ''}`,
+    headline: `Holds up to ${contextLabel(last.numCtx)} ${words.here}${slower ? ', writing a little slower' : ''}${left.length ? `, ${listNames(left.map((stage) => contextLabel(stage.numCtx)))} not checked` : ''}`,
     detail: [
       lastKept === null ? null : `At ${contextLabel(last.numCtx)} it writes at ${tpsText(last.writingTps ?? 0)} tok/s, ${percent(lastKept)} of its ${contextLabel(base.numCtx)} speed.`,
       lowestShare === null ? null
-        : lowestShare >= 0.99 ? 'The whole model stays on the graphics card.' : `At least ${percent(lowestShare)} of the model stays on the graphics card.`,
+        : lowestShare >= 0.99 ? `The whole model stays ${words.on}.` : `At least ${percent(lowestShare)} of the model stays ${words.on}.`,
       checked.length > 1 ? 'The passkey hidden in the prompt came back at every size.' : 'The passkey hidden in the prompt came back.',
     ].filter(Boolean).join(' '),
     notes,
   };
 }
 
-function problem(stage: EnduranceStage, reasons: Reason[], heldTo: EnduranceStage | null, base: EnduranceStage, kept: number | null, notes: string[]): EnduranceVerdict {
+/**
+ * Where the model sits, in the words for this computer: a graphics card with
+ * system memory beside it, or one pool of shared memory (a Mac, a Jetson),
+ * where what does not run on the GPU runs on the processor.
+ */
+function placeWords(sharedMemory: boolean) {
+  return sharedMemory
+    ? { here: 'on this computer', on: 'on the GPU', rest: 'runs on the processor', moves: 'moves to the processor' }
+    : { here: 'on your card', on: 'on the graphics card', rest: 'runs from system memory', moves: 'moves to system memory' };
+}
+
+function problem(stage: EnduranceStage, reasons: Reason[], heldTo: EnduranceStage | null, base: EnduranceStage, kept: number | null, notes: string[], words: ReturnType<typeof placeWords>): EnduranceVerdict {
   const ctx = contextLabel(stage.numCtx);
   const past = heldTo ? `past ${contextLabel(heldTo.numCtx)}` : null;
   const spills = reasons.includes('spill');
@@ -355,10 +379,10 @@ function problem(stage: EnduranceStage, reasons: Reason[], heldTo: EnduranceStag
   let headline: string;
   if (reasons.includes('slow')) {
     kind = 'slows';
-    headline = `Slows down ${past}${spills ? ': part of the model moves to system memory' : ''}`;
+    headline = `Slows down ${past}${spills ? `: part of the model ${words.moves}` : ''}`;
   } else if (spills) {
     kind = 'spills';
-    headline = past ? `Part of the model moves to system memory ${past}` : `Part of the model runs from system memory even at ${ctx}`;
+    headline = past ? `Part of the model ${words.moves} ${past}` : `Part of the model ${words.rest} even at ${ctx}`;
   } else {
     kind = 'loses';
     headline = past ? `Loses the middle of long inputs ${past}` : 'Loses the middle of even short inputs';
@@ -366,8 +390,8 @@ function problem(stage: EnduranceStage, reasons: Reason[], heldTo: EnduranceStag
   const detail = [
     kept === null || stage.writingTps === null ? null : `At ${ctx} it writes at ${tpsText(stage.writingTps)} tok/s, ${percent(kept)} of its ${contextLabel(base.numCtx)} speed.`,
     stage.gpuShare === null ? null
-      : stage.gpuShare < ENDURANCE_ON_CARD_MIN ? `Only ${percent(stage.gpuShare)} of the model fits on the graphics card there; the rest runs from system memory.`
-        : `${stage.gpuShare >= 0.99 ? 'All' : percent(stage.gpuShare)} of the model stays on the graphics card, so this is the cost of reading more, not of running out of room.`,
+      : stage.gpuShare < ENDURANCE_ON_CARD_MIN ? `Only ${percent(stage.gpuShare)} of the model fits ${words.on} there; the rest ${words.rest}.`
+        : `${stage.gpuShare >= 0.99 ? 'All' : percent(stage.gpuShare)} of the model stays ${words.on}, so this is the cost of reading more, not of running out of room.`,
     lost ? `The passkey hidden in the prompt did not come back at ${ctx}.` : null,
   ].filter(Boolean).join(' ');
   return { kind, problemStage: stage.id, heldTo: heldTo?.numCtx ?? null, headline, detail, notes };
@@ -414,7 +438,7 @@ function failureFor(model: string, reply: Exclude<EnduranceRunReply, { status: '
     case 'not-installed':
       return { kind: 'not-installed', message: `${model} is not installed.` };
     case 'too-big':
-      return { kind: 'too-big', message: `Not run: ${model} did not fit in this PC's memory.` };
+      return { kind: 'too-big', message: `Not run: ${model} did not fit in this computer's memory.` };
     case 'busy':
       return {
         kind: 'busy',
@@ -450,10 +474,10 @@ export function assembleEnduranceResult(
 ): EnduranceOutcome {
   if (reply.status !== 'done') return failureFor(model, reply);
   const stages = reply.stages.map((reading) => toStage(reading, ENDURANCE_STAGES.find((def) => def.id === reading.id)?.label ?? reading.id));
-  const verdict = enduranceVerdict(stages);
+  const verdict = enduranceVerdict(stages, { sharedMemory: Boolean(reply.machine.isUnifiedMemory) });
   // Where a model gives out moves with what else uses the card, so a busy one is said beside the verdict, not only before it.
   if (baseline && (baseline.level === 'busy' || baseline.level === 'heavy')) {
-    verdict.notes.push('The graphics card was busy before the check started, so a slow-down here may be something else\'s and not the model\'s. Close other graphics-heavy programs and check again.');
+    verdict.notes.push(`The ${reply.machine.isUnifiedMemory ? 'GPU' : 'graphics card'} was busy before the check started, so a slow-down here may be something else's and not the model's. Close other graphics-heavy programs and check again.`);
   }
   return {
     kind: 'measured',

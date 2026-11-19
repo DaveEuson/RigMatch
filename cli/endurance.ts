@@ -32,7 +32,7 @@ import {
   type EnduranceStage,
 } from '../src/lib/contextEndurance.ts';
 import { MARQUEE_BORDER, describeHardware, marquee, wrap, type FitHardware } from './fitCheck.ts';
-import { afterNote, number, pad, scrubPaths, tps, type CardNote, type MeasureDeps, UNLOAD_SETTLE_MS } from './measure.ts';
+import { afterNote, gpuWord, number, pad, scrubPaths, tps, type CardNote, type MeasureDeps, UNLOAD_SETTLE_MS } from './measure.ts';
 
 type Phase = Omit<EnduranceProgress, 'id'>;
 
@@ -65,7 +65,7 @@ export function checkEnduranceArgs(
   if (values.vram !== undefined) throw new Error('--vram grades for another card, and --endurance measures this one, so they do not go together.');
   if (values.all || values.installed) throw new Error('--all and --installed list models, and --endurance runs one: use one or the other.');
   if ((values.provider ?? 'ollama').toLowerCase().replace(/[\s_-]/g, '') !== 'ollama') {
-    throw new Error("--endurance works only with --provider ollama: it reads how much of the model sits on the graphics card from Ollama's /api/ps, which LM Studio does not offer.");
+    throw new Error("--endurance works only with --provider ollama: it reads how much of the model sits on the GPU from Ollama's /api/ps, which LM Studio does not offer.");
   }
   return { model: positionals[0] };
 }
@@ -121,6 +121,8 @@ export async function measureEndurance(
 
 export type PrintOptions = {
   show?: boolean; columns?: number; header?: FitHardware;
+  /** Shared memory (a Mac, a Jetson): the words say GPU, not graphics card. */
+  sharedMemory?: boolean;
   /** What the card was doing before the check: a busy one is said in the intro. */
   before?: CardNote | null;
 };
@@ -139,7 +141,7 @@ export function formatEnduranceIntro(
   return [
     ...(sign ? marquee('endurance', 'Where does it start to slow down?') : ['RigMatch context endurance']),
     ...wrap(describeHardware(hardware), columns),
-    ...wrap(`${show ? 'Tonight\'s endurance round' : 'Checking'}: ${model}. It runs the model at ${stageList()} of context, with a prompt that fills each, and reads back how fast it writes, how much of it sits on the graphics card and whether it still finds a passkey hidden in the middle. This takes ${time}, longer if the model stops fitting at the larger sizes. Each size loads the model again. Ctrl+C stops and unloads.`, columns),
+    ...wrap(`${show ? 'Tonight\'s endurance round' : 'Checking'}: ${model}. It runs the model at ${stageList()} of context, with a prompt that fills each, and reads back how fast it writes, how much of it sits on the ${gpuWord(hardware.unifiedMemory)} and whether it still finds a passkey hidden in the middle. This takes ${time}, longer if the model stops fitting at the larger sizes. Ctrl+C stops and unloads.`, columns),
     ...(before?.message ? wrap(before.message, columns) : []),
     ...(show ? ['', 'Endurance round'] : []),
   ].join('\n');
@@ -160,7 +162,7 @@ export function formatEnduranceDone(report: EnduranceReport): string {
   return `${report.model}: ${report.status === 'busy' ? 'not kept, Ollama was busy' : report.status === 'failed' ? 'did not finish' : report.status}`;
 }
 
-const header = ['Stage', 'Context', 'Prompt', 'Writing', 'Reading', 'Loads in', 'On the card', 'Passkey', 'Feels'];
+const header = ['Stage', 'Context', 'Prompt', 'Writing', 'Reading', 'Loads in', 'On GPU', 'Passkey', 'Feels'];
 
 function rowFor(stage: EnduranceStage): string[] {
   const lead = [stage.label, contextLabel(stage.numCtx)];
@@ -185,7 +187,7 @@ const headerLines = (title: string, hardware: FitHardware | undefined, columns: 
  * The answer: one row a stage, then the verdict in words, what was left out,
  * what the card was doing, and how far to trust the cut-offs.
  */
-export function formatEnduranceReport(report: EnduranceReport, { show = false, columns, header: card }: PrintOptions = {}): string {
+export function formatEnduranceReport(report: EnduranceReport, { show = false, columns, header: card, sharedMemory = false }: PrintOptions = {}): string {
   const lines = headerLines(`RigMatch context endurance: ${report.model}`, card, columns);
   if (report.status === 'missing') {
     lines.push(...wrap(`${report.model} is not installed. Get it with: ${report.command}, then check it again.`, columns));
@@ -208,9 +210,9 @@ export function formatEnduranceReport(report: EnduranceReport, { show = false, c
     verdict.detail,
     ...verdict.notes,
     describeBaseline(result.baseline),
-    ...afterNote(report.card?.after),
+    ...afterNote(report.card?.after, sharedMemory),
     `Writing is how fast the answer comes out; reading is how fast the prompt goes in. Loading is timed on its own and left out of both speeds. The passkey is hidden 55% of the way into the prompt.`,
-    `A size is flagged when writing falls under ${Math.round(ENDURANCE_SPEED_KEPT_MIN * 100)}% of the ${contextLabel(ENDURANCE_STAGES[0].numCtx)} speed, less than ${Math.round(ENDURANCE_ON_CARD_MIN * 100)}% of the model sits on the graphics card, or the passkey is lost. Those cut-offs were set on three models on one card (an RTX 4070 12 GB), so treat the verdict as a guide.`,
+    `A size is flagged when writing falls under ${Math.round(ENDURANCE_SPEED_KEPT_MIN * 100)}% of the ${contextLabel(ENDURANCE_STAGES[0].numCtx)} speed, less than ${Math.round(ENDURANCE_ON_CARD_MIN * 100)}% of the model sits on the ${gpuWord(sharedMemory)}, or the passkey is lost. Those cut-offs were set on three models on one card (an RTX 4070 12 GB), so treat the verdict as a guide.`,
   ].filter(Boolean);
   lines.push(...prose.flatMap((text) => wrap(text, columns)));
   if (show) lines.push('', ...wrap(`Tonight's verdict on ${report.model}: ${verdict.headline}.`, columns));

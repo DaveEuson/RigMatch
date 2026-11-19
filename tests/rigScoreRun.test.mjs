@@ -112,9 +112,9 @@ test('every way a tier can end without a result is said in words', () => {
 
   const small = said({ status: 'too-big', machine: { ...machine, vramGb: 12 } }, 'extreme');
   assert.equal(small.kind, 'too-big');
-  assert.match(small.message, /^Not run: the Extreme tier needs 24 GB of graphics memory, and this PC has 12 GB\.$/);
+  assert.match(small.message, /^Not run: the Extreme tier needs 24 GB of graphics memory, and this computer has 12 GB\.$/);
   assert.doesNotMatch(small.message, /\b0\b/);
-  assert.match(said({ status: 'too-big', error: 'requires more system memory' }).message, /did not fit in this PC's memory/);
+  assert.match(said({ status: 'too-big', error: 'requires more system memory' }).message, /did not fit in this computer's memory/);
 
   const busy = said({ status: 'busy', loadedModels: ['mistral:7b', 'gemma3:4b'] });
   assert.equal(busy.kind, 'busy');

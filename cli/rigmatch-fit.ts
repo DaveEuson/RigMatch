@@ -2,12 +2,12 @@
 /**
  * rigmatch-fit: which local AI models will run well on this computer.
  *
- *   npx rigmatch-fit                  the best 20 for this PC
+ *   npx rigmatch-fit                  the best 20 for this computer
  *   npx rigmatch-fit --all            every model, including the ones that will not fit
  *   npx rigmatch-fit --installed      only the models Ollama already has
  *   npx rigmatch-fit --json           every model, for scripts
  *   npx rigmatch-fit --provider lmstudio
- *   npx rigmatch-fit --vram 16        grade for a 16 GB card instead of this one
+ *   npx rigmatch-fit --vram 16        grade for 16 GB of graphics memory instead of this computer's
  *   npx rigmatch-fit --measure        RigScore's speed test on the tier models installed here
  *   npx rigmatch-fit --measure qwen3.5:9b   one installed model's real speed, beside the estimate
  *   npx rigmatch-fit --endurance qwen3:14b  where one installed model slows down as the context grows
@@ -25,7 +25,7 @@ import { parseArgs } from 'node:util';
 import si from 'systeminformation';
 import pkg from './package.json' with { type: 'json' };
 import systemProfile from '../electron/systemProfile.cjs';
-import { catalogFor, formatTable, ollamaUrl, rankModels, toJson, type FitHardware, type Provider } from './fitCheck.ts';
+import { catalogFor, flaggedHardware, formatTable, ollamaUrl, parseVramFlag, rankModels, toJson, type FitHardware, type Provider } from './fitCheck.ts';
 import { checkEnduranceArgs } from './endurance.ts';
 import { runEnduranceCommand } from './enduranceCommand.ts';
 import { checkMeasureArgs } from './measure.ts';
@@ -42,10 +42,12 @@ Usage: rigmatch-fit [options]
   --installed         List only the models Ollama already has, graded
   --json              Print every model as JSON, for scripts (with --installed, only those)
   --provider <name>   ollama (default) or lmstudio: which download command to print
-  --vram <GB>         Grade for a graphics card with this much memory instead of this one
+  --vram <GB>         Grade for this much graphics memory instead of this computer's
+                      (on a Mac, this much shared memory)
   --measure           Run RigScore's speed test on the tier models installed here:
                       Light llama3.2:3b, Standard qwen3:8b, Heavy qwen3:14b, and
-                      Extreme qwen3:30b-a3b on a 24 GB card. Takes minutes.
+                      Extreme qwen3:30b-a3b with 24 GB of graphics memory (26 GB
+                      on a Mac). Takes minutes.
   --measure <model>   Measure one installed model's real speed with the same test
   --endurance <model> Find where one installed model slows down or loses its place as
                       the context grows, at 2K, 8K and 16K. Takes a few minutes.
@@ -57,20 +59,22 @@ answer quality by size and family, the estimated speed, and the room left in
 graphics memory.
 
 --measure runs the models on this computer's Ollama, so the speeds are real:
-writing and reading tokens a second, and points against the reference PC
-(1,000 is an RTX 4070 12 GB), comparable with the RigMatch app and other PCs.
+writing and reading tokens a second, and points against the reference
+computer (1,000 is an RTX 4070 12 GB), comparable with the RigMatch app and
+other computers.
 It never downloads a model: a missing one gets its "ollama pull" command. It
 will not run while another program has a model loaded, warns when something
-else is using an NVIDIA card, and unloads what it loaded when it finishes.
+else is using the graphics card (or a Mac's GPU), and unloads what it loaded
+when it finishes.
 Ctrl+C stops it and unloads. It runs local models only: a cloud model runs
 on Ollama's servers, so it is refused.
 
 --endurance checks the context the same way: it fills 2K, 8K and 16K with a
 prompt that hides a passkey, and reports the writing and reading speed, how
-much of the model sits on the graphics card, and whether the passkey came
-back. It says where the model first slows down or loses its place on your
-card. It takes the same care as --measure, and needs Ollama: LM Studio does
-not say how much of a model is on the card.`;
+much of the model sits on the GPU, and whether the passkey came back. It
+says where the model first slows down or loses its place on this computer.
+It takes the same care as --measure, and needs Ollama: LM Studio does not
+say how much of a model is on the GPU.`;
 
 /** main.cjs's runCommand: { output, error } and never a throw. */
 function run(command: string, args: string[], timeoutMs: number): Promise<{ output: string; error: string | null }> {
@@ -84,13 +88,10 @@ function run(command: string, args: string[], timeoutMs: number): Promise<{ outp
 async function detectHardware(vramFlag: string | undefined): Promise<FitHardware> {
   const common = { platform: process.platform, arch: os.arch() };
   if (vramFlag !== undefined) {
-    const vramGb = Number(vramFlag);
-    if (!Number.isFinite(vramGb) || vramGb < 0) throw new Error(`--vram takes a number of GB, such as --vram 12, not "${vramFlag}".`);
-    // 0 means no graphics card at all, which is graded as such: a model too
-    // big for the processor is an F.
-    return vramGb === 0
-      ? { ...common, gpu: 'No graphics card', vramGb: 0, unifiedMemory: false, ramGb: toGb(os.totalmem()), source: 'flag', noGpu: true }
-      : { ...common, gpu: `A ${vramGb} GB graphics card`, vramGb, unifiedMemory: false, ramGb: toGb(os.totalmem()), source: 'flag' };
+    const vramGb = parseVramFlag(vramFlag);
+    // Only an ARM computer has shared memory, so nothing else waits to be read.
+    const detected = vramGb > 0 && common.arch === 'arm64' ? await detectHardware(undefined) : null;
+    return flaggedHardware(vramGb, detected, common, toGb(os.totalmem()));
   }
   const [mem, graphics] = await Promise.all([si.mem(), si.graphics()]);
   const pool = await systemProfile.resolveGpuPool({
@@ -198,10 +199,33 @@ function finish(code: number): void {
   process.stdout.write('', () => process.stderr.write('', () => process.exit(code)));
 }
 
+/**
+ * What went wrong, in RigMatch's words. Node's own parser says "Unknown option
+ * '--nope'. To specify a positional argument starting with a '-', place it at
+ * the end of the command after '--', as in '-- \"--nope\"'."
+ */
+function errorText(error: unknown): string {
+  const code = (error as { code?: unknown } | null)?.code;
+  const message = error instanceof Error ? error.message : String(error);
+  if (code === 'ERR_PARSE_ARGS_UNKNOWN_OPTION') {
+    const option = message.match(/'([^']+)'/)?.[1] ?? 'that option';
+    return `rigmatch-fit has no option ${option}. rigmatch-fit --help lists them.`;
+  }
+  if (code === 'ERR_PARSE_ARGS_INVALID_OPTION_VALUE') {
+    const option = message.match(/--[a-z-]+/)?.[0] ?? 'That option';
+    return `${option} needs a value, such as ${option === '--vram' ? '--vram 12' : `${option} <value>`}. rigmatch-fit --help lists them.`;
+  }
+  return message;
+}
+
 main().then(
   finish,
   (error: unknown) => {
-    console.error(`rigmatch-fit: ${error instanceof Error ? error.message : String(error)}`);
+    const text = errorText(error);
+    // A script that asked for JSON gets JSON, errors included, on stdout as
+    // every answer is; the exit code still says it failed.
+    if (process.argv.includes('--json')) process.stdout.write(`${JSON.stringify({ error: text }, null, 2)}\n`);
+    else console.error(`rigmatch-fit: ${text}`);
     finish(1);
   },
 );

@@ -160,7 +160,7 @@ test('a busy card, a shared card and a failure each say so, and keep nothing', a
     [{ status: 'busy', loadedModels: ['mistral:7b'] }, /Ollama has mistral:7b loaded by another program/],
     [{ status: 'shared', loadedModels: ['mistral:7b'] }, /Not saved: mistral:7b came to share the graphics card/],
     [{ status: 'not-installed' }, /qwen3:14b is not installed/],
-    [{ status: 'too-big' }, /did not fit in this PC's memory/],
+    [{ status: 'too-big' }, /did not fit in this computer's memory/],
     [{ status: 'failed', error: 'connection refused' }, /The check did not finish: connection refused/],
   ]) {
     const { made, writes } = session(bridge(reply));

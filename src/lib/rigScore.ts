@@ -189,10 +189,29 @@ export function compareStamps(a: RigStamp, b: RigStamp): Comparability {
     : { comparable: true, notes };
 }
 
-/** The tiers a card can hold, so the screen offers only those and says so for the rest. */
+/**
+ * The share of shared memory (a Mac, a Jetson) a model can have beside the
+ * system, as the fit grade sizes it (UNIFIED_USABLE_SHARE in modelGrade.ts).
+ */
+const SHARED_MEMORY_MODEL_SHARE = 0.7;
+
+/**
+ * The memory a tier needs, in GB: its card size on a graphics card, and on
+ * shared memory enough that the model is within the share it can have.
+ */
+export function tierNeedsGb(tier: RigTier, isUnifiedMemory = false): number {
+  return isUnifiedMemory ? Math.ceil(tier.sizeGb / SHARED_MEMORY_MODEL_SHARE) : tier.minVramGb;
+}
+
+/**
+ * The tiers a card can hold, so the screen offers only those and says so for
+ * the rest. On shared memory every tier was offered, so a 16 GB Mac was told
+ * to download Extreme's 17.7 GB model, which its own fit grade calls too big.
+ * Shared memory nobody could read still offers every tier.
+ */
 export function tiersThatFit(vramGb: number, isUnifiedMemory = false): RigTier[] {
-  if (isUnifiedMemory) return [...RIG_TIERS];
-  return RIG_TIERS.filter((tier) => vramGb >= tier.minVramGb);
+  if (isUnifiedMemory && !(vramGb > 0)) return [...RIG_TIERS];
+  return RIG_TIERS.filter((tier) => vramGb >= tierNeedsGb(tier, isUnifiedMemory));
 }
 
 /** A tier's reference, with everything needed to check a result against it. */

@@ -182,7 +182,7 @@ export function ContextEndurance({ models, ready, busy }: {
               `Measured ${formatDateTime(result.completedAt)} on ${result.stamp.gpu ?? 'an unread graphics card'}${result.stamp.ollamaVersion ? `, Ollama ${result.stamp.ollamaVersion}` : ''}.`,
               `A size is flagged when writing falls under ${Math.round(ENDURANCE_SPEED_KEPT_MIN * 100)}% of its ${contextLabel(base.numCtx)} speed, less than ${Math.round(ENDURANCE_ON_CARD_MIN * 100)}% of the model sits on the graphics card, or the passkey hidden in the prompt is lost.`,
               'Those cut-offs were set on three models on one card (an RTX 4070 12 GB), so treat the verdict as a guide.',
-              'Loading is timed on its own and left out of the speeds. The result stays on this PC.',
+              'Loading is timed on its own and left out of the speeds. The result stays on this computer.',
             ].filter(Boolean).join(' ')}
           </p>
         </>

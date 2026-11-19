@@ -72,7 +72,40 @@ export function ollamaUrl(raw = process.env.OLLAMA_HOST): string {
   const port = withPort ? withPort[2] : scheme === 'https' ? '443' : scheme === 'http' ? '80' : '11434';
   // A server address that means "every interface" (":11434", 0.0.0.0, ::) is this computer to a client.
   const local = !host || ['0.0.0.0', '::', '[::]'].includes(host);
+  // A port that is not a number left the colon in the host: "not_a_host:xx"
+  // came out as http://not_a_host:xx:11434.
+  if (!local && !withPort && hostPort.includes(':') && !/^\[[^\]]+\]$/.test(hostPort)) {
+    throw new Error(`OLLAMA_HOST is "${value}", which is not an address: the part after the colon should be a port number, as in 127.0.0.1:11434.`);
+  }
   return `${scheme ?? 'http'}://${local ? '127.0.0.1' : host}:${port}${path}`;
+}
+
+/** More memory than any graphics card or Mac has: a typo, not a computer. */
+const VRAM_FLAG_MAX_GB = 1024;
+
+/**
+ * --vram's number. "" was read as 0, so `--vram ""` graded for no graphics
+ * card without a word, and 99999 was taken as a card.
+ */
+export function parseVramFlag(vramFlag: string): number {
+  const vramGb = vramFlag.trim() === '' ? Number.NaN : Number(vramFlag);
+  if (!Number.isFinite(vramGb) || vramGb < 0 || vramGb > VRAM_FLAG_MAX_GB) {
+    throw new Error(`--vram takes a number of GB from 0 to ${VRAM_FLAG_MAX_GB}, such as --vram 12, not "${vramFlag}".`);
+  }
+  return vramGb;
+}
+
+/**
+ * The computer --vram describes. On shared memory (a Mac, a Jetson) it is this
+ * chip with that much memory: as "A 16 GB graphics card", a 16 GB Mac was
+ * graded about 4.7 times faster than the same Mac detected. 0 means no
+ * graphics card at all, which is graded as such: a model too big for the
+ * processor is an F.
+ */
+export function flaggedHardware(vramGb: number, detected: FitHardware | null, common: Pick<FitHardware, 'platform' | 'arch'>, ramGb: number): FitHardware {
+  if (vramGb === 0) return { ...common, gpu: 'No graphics card', vramGb: 0, unifiedMemory: false, ramGb, source: 'flag', noGpu: true };
+  if (detected?.unifiedMemory) return { ...detected, vramGb, ramGb: vramGb, source: 'flag', driverProblem: null };
+  return { ...common, gpu: `A ${vramGb} GB graphics card`, vramGb, unifiedMemory: false, ramGb, source: 'flag' };
 }
 
 /** A catalog size, with the other names Ollama lists it under. */
@@ -312,7 +345,7 @@ export function formatTable(
   // A terminal too narrow for the sign gets the plain title.
   const marquee = show && (!columns || columns >= MARQUEE_BORDER.length);
   const prose: string[] = [describeHardware(hardware)];
-  if (hardware.source === 'flag') prose.push('Graded for the graphics memory you gave with --vram, not this computer\'s.');
+  if (hardware.source === 'flag') prose.push(`Graded for the ${hardware.unifiedMemory ? 'shared' : 'graphics'} memory you gave with --vram, not this computer's.`);
   if (hardware.driverProblem) prose.push(gpuDriverMessage(hardware.driverProblem));
   if (provider === 'lm-studio') {
     prose.push('LM Studio names models its own way, so each command is a search: lms get shows what it found before downloading.');

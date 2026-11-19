@@ -80,7 +80,7 @@ test('it says how long, in minutes, before it starts', () => {
   const intro = formatIntro(card12, planTiers(card12, ['llama3.2:3b', 'qwen3:8b', 'qwen3:14b']));
   assert.match(intro, /This takes about \d+ minutes?|This takes about a minute/);
   assert.match(intro, /Ctrl\+C stops and unloads\./);
-  assert.match(intro, /Extreme \(qwen3:30b-a3b\) is not run: needs 24 GB of graphics memory, and this PC has 12 GB\./);
+  assert.match(intro, /Extreme \(qwen3:30b-a3b\) is not run: needs 24 GB of graphics memory, and this computer has 12 GB\./);
 });
 
 test('measured tiers get points against the reference and a band, and the Standard tier is the headline', async () => {
@@ -133,8 +133,8 @@ test('in a terminal it is a show; piped it is plain, and both are ASCII', async 
   assert.doesNotMatch(plain, /o-\*-o|Tonight|Speed dates/);
   assert.match(plain, /RigScore: 1,000 points \(Standard tier, qwen3:8b\)\. Excellent: long answers and code arrive in seconds\./);
   assert.match(plain, /^Standard\s+qwen3:8b\s+66 tok\/s\s+3,775 tok\/s\s+1,000\s+Excellent$/m);
-  assert.match(plain, /^Extreme\s+qwen3:30b-a3b\s+Not run: needs 24 GB of graphics memory, and this PC has 12 GB\.$/m);
-  assert.match(plain, /1,000 points is the reference PC, an RTX 4070 12 GB on Ollama 0\.35\.1\./);
+  assert.match(plain, /^Extreme\s+qwen3:30b-a3b\s+Not run: needs 24 GB of graphics memory, and this computer has 12 GB\.$/m);
+  assert.match(plain, /1,000 points is the reference computer, an RTX 4070 12 GB on Ollama 0\.35\.1\./);
   for (const text of [show, plain]) assert.match(text, ascii);
   // Narrow terminal: no sign, wrapped prose.
   assert.doesNotMatch(formatIntro(card12, plan, { show: true, columns: 30 }), /o-\*-o/);
@@ -254,7 +254,7 @@ test('a speed far below the grade\'s estimate is said, with its reason, on the r
   const heavy = report.lines.find((line) => line.tier.id === 'heavy');
   assert.equal(heavy.estimateTps, 35);
   const text = formatReport(report, { header: card12 });
-  assert.match(text, /^Heavy: writing 2\.4 tok\/s is far below the ~35 tok\/s estimated for this card\. Something else may have been using the graphics card, or the model did not sit wholly on it/m);
+  assert.match(text, /^Heavy: writing 2\.4 tok\/s is far below the ~35 tok\/s estimated here\. Something else may have been using the graphics card, or the model did not sit wholly on it/m);
   assert.doesNotMatch(text.split('\n').filter((line) => /^Light:/.test(line)).join(' '), /far below/, 'the tier at its estimate is not flagged');
   const json = toMeasureJson(report, card12, '0.1.0');
   assert.deepEqual(json.tiers.filter((entry) => entry.status === 'measured').map((entry) => [entry.tier, entry.estimatedTps, entry.belowEstimate]),
@@ -278,7 +278,7 @@ test('a busy card is said before the runs and after, in the text and in the JSON
   assert.match(formatModelIntro('qwen3:8b', card12, { estimateTps: 61, sizeGb: 4.9 }, { before: heavy }), /Before starting: the graphics card is already 92% busy/);
 
   const report = { ...(await measureTiers(plan, async (request) => atReference(request))), card: { before: heavy, after: heavy } };
-  assert.match(formatReport(report), /After the runs, the graphics card is already 92% busy\. Steam is running\. Something else was probably using the graphics card during them, so these numbers are lower than this PC can do\./);
+  assert.match(formatReport(report), /After the runs, the graphics card is already 92% busy\. Steam is running\. Something else was probably using the graphics card during them, so these numbers are lower than this computer can do\./);
   const clean = { ...report, card: { before: clear, after: clear } };
   assert.doesNotMatch(formatReport(clean), /After the runs/);
   // Steam open, with the card itself quiet: said softly before the runs, never "busy", and nothing after.
@@ -495,8 +495,8 @@ test('with no graphics card nothing runs: every tier is "not run", and the comma
   try {
     const run = await runCommand({ model: undefined, json: false }, ollama, { hardware: noCard });
     assert.equal(run.code, 1);
-    assert.match(run.err, /Nothing to measure: no RigScore tier model is installed that this card can hold\./);
-    assert.match(run.out, /^Light\s+llama3\.2:3b\s+Not run: needs 4 GB of graphics memory, and this PC has 0 GB\.$/m);
+    assert.match(run.err, /Nothing to measure: no RigScore tier model is installed that this computer can hold\./);
+    assert.match(run.out, /^Light\s+llama3\.2:3b\s+Not run: needs 4 GB of graphics memory, and this computer has 0 GB\.$/m);
     assert.match(run.out, /No RigScore: no tier was measured\./);
     assert.equal(ollama.calls.some((call) => call.path === '/api/generate'), false, 'nothing loaded, so nothing to unload');
     const json = JSON.parse((await runCommand({ model: undefined, json: true }, ollama, { hardware: noCard })).out);
@@ -519,7 +519,7 @@ test('on a 6 GB card the headline is the biggest tier that ran, as in the app, n
 
     const text = await runCommand({ model: undefined, json: false }, ollama, { hardware: card6 });
     assert.match(text.out, /^RigScore: 1,000 points \(Light tier, llama3\.2:3b\)\.$/m);
-    assert.match(text.out, /The usual headline is the Standard tier, which this card cannot hold, so this is the biggest tier it ran\./);
+    assert.match(text.out, /The usual headline is the Standard tier, which this computer cannot hold, so this is the biggest tier it ran\./);
     assert.doesNotMatch(text.out, /No RigScore yet/);
 
     // And with Standard simply not installed, the pull command is offered.
@@ -565,7 +565,7 @@ test("a model another program loaded is left alone, even when it is the tier's o
   const ollama = await fakeOllama({ installed: TIERS_INSTALLED, loaded: ['qwen3:8b'] });
   try {
     const run = await runCommand({ model: undefined, json: false }, ollama);
-    assert.match(run.error.message, /^Ollama has qwen3:8b loaded by another program\. It shares the graphics card and would slow the test, so rigmatch-fit leaves it alone and does not start\./);
+    assert.match(run.error.message, /^Ollama has qwen3:8b loaded by another program\. It shares the GPU and would slow the test, so rigmatch-fit leaves it alone and does not start\./);
     assert.doesNotMatch(run.error.message, /\bwaits\b/);
     assert.equal(ollama.calls.some((call) => call.path === '/api/generate'), false, 'nothing run, nothing unloaded');
     assert.deepEqual(ollama.state.loaded.map((entry) => entry.name), ['qwen3:8b']);
@@ -704,9 +704,11 @@ test('Ctrl+C mid-run stops the run, unloads the model and exits 130; a second Ct
 
   const again = await fakeOllama({ installed: ['gemma3:12b'], stall: true });
   try {
-    const { interrupt, finished } = startCommand({ model: 'gemma3:12b', json: false }, again);
+    let clock = 0;
+    const { interrupt, finished } = startCommand({ model: 'gemma3:12b', json: false }, again, { env: { now: () => clock } });
     await again.waitForStall();
     interrupt.emit('SIGINT');
+    clock = 1500;
     interrupt.emit('SIGINT');
     assert.equal((await finished).left(), 130, 'the second press leaves');
   } finally {
@@ -814,8 +816,15 @@ test('the command refuses while another program has a model loaded, and never un
     for (const args of [['--measure'], ['--measure', '--json'], ['--measure', 'llama3.2:3b']]) {
       const result = await runCli(args, { OLLAMA_HOST: ollama.host });
       assert.equal(result.code, 1, args.join(' '));
-      assert.match(result.stderr, /Ollama has mistral:7b loaded by another program\. It shares the graphics card and would slow the test, so rigmatch-fit leaves it alone and does not start\./);
-      assert.equal(result.stdout, '');
+      const said = /Ollama has mistral:7b loaded by another program\. It shares the GPU and would slow the test, so rigmatch-fit leaves it alone and does not start\./;
+      if (args.includes('--json')) {
+        // A script that asked for JSON gets its error as JSON too.
+        assert.match(JSON.parse(result.stdout).error, said);
+        assert.equal(result.stderr, '');
+      } else {
+        assert.match(result.stderr, said);
+        assert.equal(result.stdout, '');
+      }
     }
     assert.equal(ollama.calls.filter((call) => call.path === '/api/generate').length, 0, 'nothing run, nothing unloaded');
     assert.deepEqual(ollama.state.loaded.map((entry) => entry.name), ['mistral:7b']);
