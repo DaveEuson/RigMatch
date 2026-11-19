@@ -37,6 +37,7 @@ import {
   rigModelRequest,
   rigRunRequest,
   tierAvailability,
+  tooBigText,
   type RigDisturbance,
   type RigMachine,
   type RigModelStamp,
@@ -48,6 +49,9 @@ import { speedBand, type SpeedBand } from '../src/lib/rigScoreScale.ts';
 import { MARQUEE_BORDER, describeHardware, marquee, wrap, type FitHardware } from './fitCheck.ts';
 
 type Phase = Omit<RigProgress, 'id'>;
+
+/** "graphics card" on a PC; "GPU" on shared memory (a Mac, a Jetson), which has no card. */
+export const gpuWord = (shared = false) => (shared ? 'GPU' : 'graphics card');
 
 /** What the runner needs from the outside world (rigScoreRunner.cjs's runRigTier). */
 export type MeasureDeps = {
@@ -245,7 +249,7 @@ export async function checkCard(
     message: measurablyBusy
       ? contention.describeGpuContention(assessment)
       : assessment.apps.length
-        ? `${open} ${assessment.apps.length === 1 ? 'is' : 'are'} open, and can use the graphics card, but the card itself reads quiet, so this should not matter. Closing ${assessment.apps.length === 1 ? 'it' : 'them'} gives the most accurate result.`
+        ? `${open} ${assessment.apps.length === 1 ? 'is' : 'are'} open, and can use the ${gpuWord(unifiedMemory)}, but the ${unifiedMemory ? 'GPU' : 'card'} itself reads quiet, so this should not matter. Closing ${assessment.apps.length === 1 ? 'it' : 'them'} gives the most accurate result.`
         : '',
   };
 }
@@ -273,7 +277,7 @@ export function farBelowEstimate(measure: Pick<TierMeasure, 'decodeTps'>, estima
 export type PlanEntry =
   | { tier: RigTier; kind: 'run'; estimateTps: number | null }
   | { tier: RigTier; kind: 'missing'; command: string }
-  | { tier: RigTier; kind: 'too-big'; needGb: number; haveGb: number }
+  | { tier: RigTier; kind: 'too-big'; needGb: number; haveGb: number; shared?: boolean }
   /** The tag Ollama lists for this tier is a cloud model: it would run on Ollama's servers. */
   | { tier: RigTier; kind: 'cloud' };
 
@@ -284,7 +288,7 @@ export type PlanEntry =
  */
 export { CLOUD_TAG, isCloudModel } from './fitCheck.ts';
 
-export const cloudMessage = (model: string) => `${model} runs on Ollama's servers, not on this computer, so there is nothing of this PC to measure, and the prompts would leave it. rigmatch-fit --measure runs local models only.`;
+export const cloudMessage = (model: string) => `${model} runs on Ollama's servers, not on this computer, so there is nothing of this computer to measure, and the prompts would leave it. rigmatch-fit --measure runs local models only.`;
 
 /**
  * Every tier, and what happens to it here: run, if it is installed and this
@@ -301,7 +305,7 @@ export function planTiers(
   return RIG_TIERS.map((tier): PlanEntry => {
     if (cloud.has(tier.model)) return { tier, kind: 'cloud' };
     const availability = tierAvailability(tier, { vramGb: hardware.vramGb, isUnifiedMemory: hardware.unifiedMemory }, installed);
-    if (availability.kind === 'too-big') return { tier, kind: 'too-big', needGb: availability.needGb, haveGb: availability.haveGb };
+    if (availability.kind === 'too-big') return { tier, kind: 'too-big', needGb: availability.needGb, haveGb: availability.haveGb, ...(availability.shared ? { shared: true } : {}) };
     if (availability.kind === 'needs-download') return { tier, kind: 'missing', command: pullCommand(tier.model) };
     return { tier, kind: 'run', estimateTps: estimates.get(tier.model) ?? null };
   });
@@ -371,7 +375,6 @@ export function scrubPaths(text: string): string {
     .replace(/(?<=^|[\s"'(:=])\/(?:[^\s/"'<>|]+\/)+[^\r\n"'<>|]*/g, '<path>');
 }
 
-const tooBigMessage = (needGb: number, haveGb: number) => `Not run: needs ${needGb} GB of graphics memory, and this PC has ${Math.round(haveGb * 10) / 10} GB.`;
 
 function measuredLine(tier: RigTier, measure: TierMeasure, stamp: RigStamp, gpuShare: number | null, estimateTps: number | null = null, disturbance: RigDisturbance = {}): MeasuredTier {
   return { tier, status: 'measured', measure, stamp, gpuShare, points: rigPoints(measure, stamp), band: speedBand(measure.decodeTps), estimateTps, ...disturbanceOf(disturbance) };
@@ -400,7 +403,7 @@ export async function measureTiers(
   for (const entry of plan) {
     const { tier } = entry;
     if (entry.kind === 'missing') { lines.push({ tier, status: 'missing', command: entry.command }); continue; }
-    if (entry.kind === 'too-big') { lines.push({ tier, status: 'too-big', message: tooBigMessage(entry.needGb, entry.haveGb) }); continue; }
+    if (entry.kind === 'too-big') { lines.push({ tier, status: 'too-big', message: tooBigText(entry) }); continue; }
     if (entry.kind === 'cloud') { lines.push({ tier, status: 'cloud', message: cloudMessage(tier.model) }); continue; }
     if (stopped || busy) { lines.push({ tier, status: 'skipped' }); continue; }
     onTierStart?.(tier);
@@ -512,14 +515,15 @@ function pointsCell(points: RigPoints | null): string {
 }
 
 /** The notes a measured tier carries: a spill, points it cannot have, what differs from the reference. */
-function notesFor(label: string, line: { gpuShare: number | null; points: RigPoints | null; measure: TierMeasure; estimateTps: number | null } & RigDisturbance): string[] {
+function notesFor(label: string, line: { gpuShare: number | null; points: RigPoints | null; measure: TierMeasure; estimateTps: number | null } & RigDisturbance, shared = false): string[] {
   const notes: string[] = [];
+  const gpu = gpuWord(shared);
   if (line.disturbed) notes.push(`${label}: ${describeDisturbance(line.disturbedBy)} This is not a clean score.`);
   if (farBelowEstimate(line.measure, line.estimateTps)) {
-    notes.push(`${label}: writing ${tps(line.measure.decodeTps)} tok/s is far below the ~${number(line.estimateTps ?? 0)} tok/s estimated for this card. Something else may have been using the graphics card, or the model did not sit wholly on it, so this number is lower than this PC can do. Close other programs and run again before trusting it.`);
+    notes.push(`${label}: writing ${tps(line.measure.decodeTps)} tok/s is far below the ~${number(line.estimateTps ?? 0)} tok/s estimated here. Something else may have been using the ${gpu}, or the model did not sit wholly on it, so this number is lower than this computer can do. Close other programs and run again before trusting it.`);
   }
   if (line.gpuShare !== null && line.gpuShare < 0.99) {
-    notes.push(`${label} ran ${Math.round(line.gpuShare * 100)}% on the graphics card; the rest spilled into system memory.`);
+    notes.push(`${label} ran ${Math.round(line.gpuShare * 100)}% on the ${gpu}; the rest ${shared ? 'ran on the processor' : 'spilled into system memory'}.`);
   }
   if (line.points?.kind === 'not-comparable') notes.push(`${label}: no points, not the same test as the reference. ${line.points.notes.join(' ')}`);
   if (line.points?.kind === 'pending') notes.push(`${label}: points after the reference is measured.`);
@@ -534,6 +538,8 @@ function notesFor(label: string, line: { gpuShare: number | null; points: RigPoi
  */
 export type PrintOptions = {
   show?: boolean; columns?: number; header?: FitHardware;
+  /** Shared memory (a Mac, a Jetson): the words say GPU, not graphics card. */
+  sharedMemory?: boolean;
   /** What the card was doing before the runs: a busy one is said in the intro. */
   before?: CardNote | null;
 };
@@ -544,11 +550,11 @@ export type PrintOptions = {
  * a known program merely being open, Steam on most gaming PCs, is said before
  * the runs, as the app says it, but does not mean the runs were disturbed.
  */
-export function afterNote(card: CardNote | null | undefined): string[] {
+export function afterNote(card: CardNote | null | undefined, shared = false): string[] {
   if (!card || (card.level !== 'busy' && card.level !== 'heavy') || card.reasons.length === 0) return [];
   const reasons = card.reasons.join(' and ');
   const named = card.apps.length ? ` ${card.apps.join(' and ')} ${card.apps.length === 1 ? 'is' : 'are'} running.` : '';
-  return [`After the runs, ${reasons}.${named} Something else was probably using the graphics card during them, so these numbers are lower than this PC can do. Close other graphics-heavy programs and run again.`];
+  return [`After the runs, ${reasons}.${named} Something else was probably using the ${gpuWord(shared)} during them, so these numbers are lower than this computer can do. Close other graphics-heavy programs and run again.`];
 }
 
 const headerLines = (title: string, header: FitHardware | undefined, columns: number | undefined) => (header
@@ -559,11 +565,11 @@ const headerLines = (title: string, header: FitHardware | undefined, columns: nu
 export function formatIntro(hardware: FitHardware, plan: PlanEntry[], { show = false, columns, before }: PrintOptions = {}): string {
   const sign = show && (!columns || columns >= MARQUEE_BORDER.length);
   const running = plan.filter((entry) => entry.kind === 'run');
-  const lines = [...(sign ? marquee('speed test', 'How fast is your PC, really?') : ['RigMatch speed test']), describeHardware(hardware)];
+  const lines = [...(sign ? marquee('speed test', 'How fast is your rig, really?') : ['RigMatch speed test']), describeHardware(hardware)];
   const prose: string[] = [];
   for (const entry of plan) {
     if (entry.kind === 'missing') prose.push(`${entry.tier.label} needs ${entry.tier.model}, which is not installed. Get it with: ${entry.command} (${entry.tier.sizeGb} GB), then measure again.`);
-    if (entry.kind === 'too-big') prose.push(`${entry.tier.label} (${entry.tier.model}) is not run: ${tooBigMessage(entry.needGb, entry.haveGb).replace(/^Not run: /, '')}`);
+    if (entry.kind === 'too-big') prose.push(`${entry.tier.label} (${entry.tier.model}) is not run: ${tooBigText(entry).replace(/^Not run: /, '')}`);
     if (entry.kind === 'cloud') prose.push(`${entry.tier.label} (${entry.tier.model}) is not run: ${cloudMessage(entry.tier.model)}`);
   }
   if (running.length) {
@@ -571,7 +577,7 @@ export function formatIntro(hardware: FitHardware, plan: PlanEntry[], { show = f
     const time = describeDuration(estimateSeconds(running.map((entry) => ({ sizeGb: entry.tier.sizeGb, estimateTps: entry.estimateTps }))));
     prose.push(`${show ? 'Tonight\'s speed dates' : 'Measuring'}: ${who}. This takes ${time}: each loads its model, warms it up, then times ${RIG_WORKLOAD.measuredRuns} runs. Ctrl+C stops and unloads.`);
   } else {
-    prose.push('Nothing to measure: no RigScore tier model is installed that this card can hold.');
+    prose.push('Nothing to measure: no RigScore tier model is installed that this computer can hold.');
   }
   if (running.length && before?.message) prose.push(before.message);
   // In a terminal the runs that follow are the show's speed dates.
@@ -612,7 +618,7 @@ export function formatModelIntro(
   const sign = show && (!columns || columns >= MARQUEE_BORDER.length);
   const time = describeDuration(estimateSeconds([{ sizeGb: sizeGb ?? 5, estimateTps }]));
   return [
-    ...(sign ? marquee('speed test', 'How fast is your PC, really?') : ['RigMatch speed test']),
+    ...(sign ? marquee('speed test', 'How fast is your rig, really?') : ['RigMatch speed test']),
     ...wrap(describeHardware(hardware), columns),
     ...wrap(`${show ? 'Tonight\'s speed date' : 'Measuring'}: ${model}. This takes ${time}: it loads the model, warms it up, then times ${RIG_WORKLOAD.measuredRuns} runs. Ctrl+C stops and unloads.`, columns),
     ...(before?.message ? wrap(before.message, columns) : []),
@@ -621,7 +627,7 @@ export function formatModelIntro(
 }
 
 /** The results: one row a tier, the notes, the headline and what 1,000 points is. */
-export function formatReport(report: MeasureReport, { show = false, columns, header: card }: PrintOptions = {}): string {
+export function formatReport(report: MeasureReport, { show = false, columns, header: card, sharedMemory = false }: PrintOptions = {}): string {
   const header = ['Tier', 'Model', 'Writing', 'Reading', 'Points', 'Feels'];
   const rows = report.lines.map((line) => {
     const lead = [line.tier.label, line.tier.model];
@@ -639,10 +645,10 @@ export function formatReport(report: MeasureReport, { show = false, columns, hea
   const lines: string[] = headerLines('RigMatch speed test', card, columns);
   lines.push(render(full.length ? header : header.slice(0, 2)), ...rows.map(render));
 
-  const notes = report.lines.flatMap((line) => (line.status === 'measured' ? notesFor(line.tier.label, line) : []));
+  const notes = report.lines.flatMap((line) => (line.status === 'measured' ? notesFor(line.tier.label, line, sharedMemory) : []));
   if (report.busy) notes.push('Another program had a model loaded in Ollama, so RigMatch left it alone and stopped. Run again when nothing else is using Ollama.');
   if (report.stopped) notes.push('Stopped with Ctrl+C. The model was unloaded, and nothing was kept for the tier that was running.');
-  if (report.lines.some((line) => line.status === 'measured')) notes.push(...afterNote(report.card?.after));
+  if (report.lines.some((line) => line.status === 'measured')) notes.push(...afterNote(report.card?.after, sharedMemory));
   if (notes.length) lines.push('', ...notes.flatMap((text) => wrap(text, columns)));
 
   const headline = headlineOf(report);
@@ -658,7 +664,7 @@ export function formatReport(report: MeasureReport, { show = false, columns, hea
       // Standard did not run, so the first tier that did is the headline, as in the app, with
       // no speed band: a small model writing fast says little about the models most people want.
       closing.push(show ? `Tonight's RigScore: ${score} on the ${headline.tier.label} tier.` : `RigScore: ${score} (${headline.tier.label} tier, ${headline.tier.model}).`);
-      if (standardLine?.status === 'too-big') closing.push(`The usual headline is the ${standard?.label} tier, which this card cannot hold, so this is the biggest tier it ran.`);
+      if (standardLine?.status === 'too-big') closing.push(`The usual headline is the ${standard?.label} tier, which this computer cannot hold, so this is the biggest tier it ran.`);
       else if (standardLine?.status === 'missing') closing.push(`The usual headline is the ${standard?.label} tier: get ${standard?.model} (${standardLine.command}) to score it.`);
     }
   } else if (!report.stopped && !report.busy) {
@@ -666,8 +672,8 @@ export function formatReport(report: MeasureReport, { show = false, columns, hea
       ? `No RigScore yet: the headline is the ${standard?.label} tier, ${standard?.model}.`
       : 'No RigScore: no tier was measured.');
   }
-  if (headline?.disturbed) closing.push('That RigScore is not a clean score: something else used the graphics card while its tier ran. Close other graphics-heavy programs and run it again.');
-  closing.push(`1,000 points is the reference PC, an ${RIG_REFERENCE_MACHINE}. Twice as fast at both writing and reading is 2,000. Writing is how fast the answer comes out; reading is how fast the prompt goes in.`);
+  if (headline?.disturbed) closing.push(`That RigScore is not a clean score: something else used the ${gpuWord(sharedMemory)} while its tier ran. Close other graphics-heavy programs and run it again.`);
+  closing.push(`1,000 points is the reference computer, an ${RIG_REFERENCE_MACHINE}. Twice as fast at both writing and reading is 2,000. Writing is how fast the answer comes out; reading is how fast the prompt goes in.`);
   lines.push('', ...closing.flatMap((text) => wrap(text, columns)));
   return lines.join('\n');
 }
@@ -679,7 +685,7 @@ export function formatModelDone(report: ModelReport): string {
 }
 
 /** One model's measure beside its estimate. */
-export function formatModelReport(report: ModelReport, { show = false, columns, header: card }: PrintOptions = {}): string {
+export function formatModelReport(report: ModelReport, { show = false, columns, header: card, sharedMemory = false }: PrintOptions = {}): string {
   const lines = headerLines(`RigMatch speed test: ${report.model}`, card, columns);
   const estimate = report.estimateTps ? `~${number(report.estimateTps)} tok/s` : '-';
   if (report.status === 'measured') {
@@ -690,11 +696,11 @@ export function formatModelReport(report: ModelReport, { show = false, columns, 
     const render = (cells: string[]) => cells.map((cell, at) => (at === cells.length - 1 ? cell : pad(cell, widths[at]))).join('  ').trimEnd();
     lines.push(render(header), render(row), '');
     const prose = [`${report.band.label}: ${report.band.feel.charAt(0).toLowerCase()}${report.band.feel.slice(1)}`,
-      ...notesFor(report.model, report),
-      report.tier ? `${report.model} is RigScore's ${report.tier.label} tier, so it has points against the reference PC, an ${RIG_REFERENCE_MACHINE}.`
+      ...notesFor(report.model, report, sharedMemory),
+      report.tier ? `${report.model} is RigScore's ${report.tier.label} tier, so it has points against the reference computer, an ${RIG_REFERENCE_MACHINE}.`
         : 'Points are for the four RigScore tier models (--measure on its own runs them). This is this model\'s own speed on the same test.',
-      'Estimated is the fit grade\'s guess from the size and the card; writing is measured.',
-      ...afterNote(report.card?.after)];
+      'Estimated is the fit grade\'s guess from the size and the hardware; writing is measured.',
+      ...afterNote(report.card?.after, sharedMemory)];
     lines.push(...prose.flatMap((text) => wrap(text, columns)));
     if (show) lines.push('', ...wrap(`Tonight's date: ${report.model} writes ${tps(report.measure.decodeTps)} tok/s here.${report.points?.kind === 'points' ? ` ${number(report.points.points)} points.` : ''}`, columns));
   } else if (report.status === 'missing') {

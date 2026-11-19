@@ -15,7 +15,7 @@ import {
   type RigTierId,
 } from '../lib/rigScore';
 import { describeChange, historyRows, latestByTier } from '../lib/rigScoreHistory';
-import { describeDisturbance, rigHeadline, tierAvailability, tiersToRun, type RigProgress, type RigResult } from '../lib/rigScoreRun';
+import { describeDisturbance, rigHeadline, tierAvailability, tiersToRun, tooBigText, type RigProgress, type RigResult } from '../lib/rigScoreRun';
 import { RIG_SPEED_BANDS, bandRange, promptWaitSeconds, speedBand } from '../lib/rigScoreScale';
 import { rigScoreSession as session, useRigScoreSession } from '../lib/rigScoreLive';
 import type { GpuContention, OllamaStatus, PullProgressUpdate, SystemProfile } from '../types';
@@ -274,7 +274,7 @@ export function RigScorePanel({
                   {isRunning && <span>{progressText(state.progress)}</span>}
                   {!isRunning && isQueued && <span>Next</span>}
                   {!isRunning && !isQueued && availability.kind === 'too-big' && (
-                    <span>Not run: needs {availability.needGb} GB of graphics memory, and this PC has {formatGb(availability.haveGb)}.</span>
+                    <span>{tooBigText(availability)}</span>
                   )}
                   {!isRunning && !isQueued && availability.kind === 'needs-download' && (
                     download ? <span>{download}</span> : (

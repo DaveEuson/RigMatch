@@ -624,6 +624,11 @@ export type ComfyStatus = {
   execInfo?: unknown;
 };
 
+export type SecretBridge = {
+  get: (name: 'openrouter-key') => Promise<{ available: boolean; value: string }>;
+  set: (name: 'openrouter-key', value: string) => Promise<{ available: boolean }>;
+};
+
 export type AgentArcadeApi = {
   /**
    * `checkForUpdates` permits the one outbound call on this path — asking NVIDIA
@@ -631,6 +636,8 @@ export type AgentArcadeApi = {
    * check; automatic refreshes must stay local.
    */
   getSystemProfile: (options?: { checkForUpdates?: boolean }) => Promise<SystemProfile>;
+  /** Credentials kept encrypted by the system; available is false where it has no encryption. */
+  secrets?: SecretBridge;
   /**
    * Hand a built preview document to the main process and get back a URL on a
    * scheme that does not inherit the app's CSP. Returns null in the browser

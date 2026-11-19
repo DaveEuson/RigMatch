@@ -130,17 +130,17 @@ test('the three real result sets: the 3B and the 8B hold to 16K, the 14B slows d
   assert.match(big.detail, /At 16K it writes at 13 tok\/s, 31% of its 2K speed\. Only 87% of the model fits on the graphics card there; the rest runs from system memory\./);
 });
 
-test('the thresholds are 55% of the 2K speed and 92% on the card, and a stage is flagged only under them', () => {
-  assert.equal(ENDURANCE_SPEED_KEPT_MIN, 0.55);
+test('the thresholds are 50% of the 2K speed and 92% on the card, and a stage is flagged only under them', () => {
+  assert.equal(ENDURANCE_SPEED_KEPT_MIN, 0.5);
   assert.equal(ENDURANCE_ON_CARD_MIN, 0.92);
   const with16k = (writing, share) => {
     const stages = realStages('qwen3:8b');
     stages[2] = readingOf(ENDURANCE_STAGES[2], [14390, 3211, writing, 3, share, 16384]);
     return enduranceVerdict(resultOf(stages).stages);
   };
-  assert.equal(with16k(74 * 0.56, 1).kind, 'holds', 'just over 55% is the ordinary cost of a longer context');
-  assert.equal(with16k(74 * 0.54, 1).kind, 'slows');
-  assert.equal(with16k(74 * 0.54, 1).headline, 'Slows down past 8K', 'no spill, so no cause is claimed');
+  assert.equal(with16k(74 * 0.51, 1).kind, 'holds', 'just over 50% is the ordinary cost of a longer context');
+  assert.equal(with16k(74 * 0.49, 1).kind, 'slows');
+  assert.equal(with16k(74 * 0.49, 1).headline, 'Slows down past 8K', 'no spill, so no cause is claimed');
   assert.equal(with16k(74 * 0.9, 0.92).kind, 'holds', '92% on the card is not flagged');
   const spill = with16k(74 * 0.9, 0.91);
   assert.equal(spill.kind, 'spills', 'under 92% on the card, with the speed still fine');

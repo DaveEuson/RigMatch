@@ -9,6 +9,11 @@ const formatLocaleArg = process.argv.find((arg) => arg.startsWith(FORMAT_LOCALE_
 const api = {
   formatLocale: formatLocaleArg ? formatLocaleArg.slice(FORMAT_LOCALE_ARG.length) : undefined,
   getSystemProfile: (options) => ipcRenderer.invoke('system:getProfile', options),
+  // Credentials, encrypted by the system in the main process (secretStore.cjs).
+  secrets: {
+    get: (name) => ipcRenderer.invoke('secrets:get', name),
+    set: (name, value) => ipcRenderer.invoke('secrets:set', name, value),
+  },
   publishAppPreview: (html) => ipcRenderer.invoke('preview:publish', html),
   getGpuContention: () => ipcRenderer.invoke('system:getGpuContention'),
   getOllamaStatus: (baseUrl) => ipcRenderer.invoke('ollama:getStatus', baseUrl),

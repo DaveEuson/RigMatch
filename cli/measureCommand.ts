@@ -41,6 +41,8 @@ export type MeasureEnv = {
   /** Ctrl+C. The first press stops the run and unloads; a second one leaves at once. */
   interrupt?: Pick<EventEmitter, 'on' | 'off'>;
   leave?: (code: number) => unknown;
+  /** The clock the second press is timed by (Date.now); a test passes its own. */
+  now?: () => number;
   /** How long to wait for a model to leave the card (default 15 s), and for this run's own to be gone before the next. */
   unloadSettleMs?: number;
   freeWaitMs?: number;
@@ -66,7 +68,7 @@ export function assertLocalOllama(baseUrl: string, flag = '--measure'): void {
   try {
     security.assertLocalhostUrl(baseUrl);
   } catch {
-    throw new Error(`${flag} runs on this computer's Ollama only, and OLLAMA_HOST points to ${baseUrl}. RigMatch cannot read another computer's graphics card, so its numbers would carry the wrong card.`);
+    throw new Error(`${flag} runs on this computer's Ollama only, and OLLAMA_HOST points to ${baseUrl}. RigMatch cannot read another computer's GPU, so its numbers would carry the wrong one.`);
   }
 }
 
@@ -101,18 +103,31 @@ export function liveOutput(env: Pick<MeasureEnv, 'out' | 'err'>, show: boolean) 
 }
 
 /**
- * Ctrl+C: stop the run in flight; the runner unloads the model on its way out.
- * A second Ctrl+C leaves at once. Call `off` when the run is over.
+ * One Ctrl+C can arrive twice. The terminal signals every program in the
+ * foreground, so under `npx rigmatch-fit` node hears it from the terminal and
+ * again from npx, which passes its own on. Counted as two presses, the second
+ * left at once and the model stayed loaded, under "Stopping: unloading the
+ * model..." (Apple M4, 3 runs in 4; run with node directly, 0 in 2). A press
+ * this soon after the first is that same one.
  */
-export function stopOnInterrupt(env: Pick<MeasureEnv, 'interrupt' | 'leave'>, output: { live: Output; rewrite: boolean }) {
+const REPEAT_INTERRUPT_MS = 1000;
+
+/**
+ * Ctrl+C: stop the run in flight; the runner unloads the model on its way out.
+ * A second Ctrl+C, a second or more later, leaves at once. Call `off` when the
+ * run is over.
+ */
+export function stopOnInterrupt(env: Pick<MeasureEnv, 'interrupt' | 'leave' | 'now'>, output: { live: Output; rewrite: boolean }) {
   const controller = new AbortController();
-  let interrupts = 0;
+  const now = env.now ?? Date.now;
+  let firstAt: number | null = null;
   const onInterrupt = () => {
-    interrupts += 1;
-    if (interrupts > 1) {
+    if (firstAt !== null) {
+      if (now() - firstAt < REPEAT_INTERRUPT_MS) return;
       (env.leave ?? ((code: number) => process.exit(code)))(130);
       return;
     }
+    firstAt = now();
     controller.abort();
     output.live.write(`${output.rewrite ? '\n' : ''}Stopping: unloading the model...\n`);
   };
@@ -142,7 +157,7 @@ export async function runMeasureCommand({ model, json }: { model: string | undef
   const loaded = ((await fetchJson(`${baseUrl}/api/ps`, {}, 3000)) as { models?: Array<{ name?: string }> }).models ?? [];
   if (loaded.length) {
     const who = loaded.map((entry) => entry.name).filter(Boolean).join(', ');
-    throw new Error(`Ollama has ${who} loaded by another program. It shares the graphics card and would slow the test, so rigmatch-fit leaves it alone and does not start. Ollama lets an idle model go after about five minutes; close what is using it or wait, then run again.`);
+    throw new Error(`Ollama has ${who} loaded by another program. It shares the GPU and would slow the test, so rigmatch-fit leaves it alone and does not start. Ollama lets an idle model go after about five minutes; close what is using it or wait, then run again.`);
   }
 
   const hardware = await env.detectHardware();
@@ -212,7 +227,7 @@ export async function runMeasureCommand({ model, json }: { model: string | undef
       const report = { ...measured, card };
       if (output.hasProgress()) endProgress(formatModelDone(report));
       if (!json) say('');
-      out.write(`${json ? JSON.stringify(toModelJson(report, hardware, env.version), null, 2) : formatModelReport(report, { show, columns, header })}\n`);
+      out.write(`${json ? JSON.stringify(toModelJson(report, hardware, env.version), null, 2) : formatModelReport(report, { show, columns, header, sharedMemory: hardware.unifiedMemory })}\n`);
       return interrupt.signal.aborted ? 130 : report.status === 'measured' ? 0 : 1;
     }
 
@@ -221,7 +236,7 @@ export async function runMeasureCommand({ model, json }: { model: string | undef
     say(formatIntro(hardware, plan, { show, columns, before: card.before }));
     if (!plan.some((entry) => entry.kind === 'run')) {
       const report = await measureTiers(plan, async () => ({ status: 'stopped' }));
-      out.write(`${json ? JSON.stringify(toMeasureJson(report, hardware, env.version), null, 2) : show ? '' : formatReport(report, { columns, header })}\n`);
+      out.write(`${json ? JSON.stringify(toMeasureJson(report, hardware, env.version), null, 2) : show ? '' : formatReport(report, { columns, header, sharedMemory: hardware.unifiedMemory })}\n`);
       return 1;
     }
     if (!show) say('');
@@ -232,7 +247,7 @@ export async function runMeasureCommand({ model, json }: { model: string | undef
     if (measured.lines.some((line) => line.status === 'measured')) card.after = await readCard();
     const report = { ...measured, card };
     if (!json) say('');
-    out.write(`${json ? JSON.stringify(toMeasureJson(report, hardware, env.version), null, 2) : formatReport(report, { show, columns, header })}\n`);
+    out.write(`${json ? JSON.stringify(toMeasureJson(report, hardware, env.version), null, 2) : formatReport(report, { show, columns, header, sharedMemory: hardware.unifiedMemory })}\n`);
     if (report.stopped || interrupt.signal.aborted) return 130;
     return report.busy || report.lines.some((line) => line.status === 'failed') ? 1 : 0;
   } finally {

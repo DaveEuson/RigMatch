@@ -1,5 +1,5 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
-const { app, BrowserWindow, dialog, ipcMain, protocol, screen, shell } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, protocol, safeStorage, screen, shell } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const path = require('node:path');
 const { fileURLToPath } = require('node:url');
@@ -102,6 +102,7 @@ const { downloadModel, verifyComfyFolder } = require('./comfyModels.cjs');
 const { locateComfyRoots } = require('./comfyLocate.cjs');
 const { findComfyLaunchers, launchComfy } = require('./comfyLaunch.cjs');
 const { smoothRate } = require('./downloadRate.cjs');
+const { createSecretStore } = require('./secretStore.cjs');
 
 const OLLAMA_LOCAL_URL = 'http://127.0.0.1:11434';
 const LM_STUDIO_LOCAL_URL = 'http://127.0.0.1:1234/v1';
@@ -1238,6 +1239,18 @@ function registerHandlers() {
     return { ok: true };
   });
 
+  // A credential the person typed, encrypted by the system (secretStore.cjs).
+  // Not handleLogged: a failed call would write its arguments, the key among
+  // them, to the log.
+  const secrets = createSecretStore({ file: path.join(app.getPath('userData'), 'secrets.json'), safeStorage });
+  ipcMain.handle('secrets:get', (event, name) => {
+    assertTrustedIpcSender(event);
+    try { return secrets.read(name); } catch { return { available: false, value: '' }; }
+  });
+  ipcMain.handle('secrets:set', (event, name, value) => {
+    assertTrustedIpcSender(event);
+    try { return secrets.write(name, value); } catch { return { available: false }; }
+  });
   handleLogged('logs:list', 'logs', (_event, limit) => readAppLogs(limit));
   handleLogged('logs:append', 'logs', (_event, entry) => appendAppLog(entry));
   handleLogged('logs:clear', 'logs', () => clearAppLogs());

@@ -15,7 +15,7 @@ import {
 import { CLOUD_TAG, UNLOAD_SETTLE_MS, checkCard, isCloudModel, type CardNote, type MeasureDeps } from './measure.ts';
 import { assertLocalOllama, liveOutput, stopOnInterrupt, type MeasureEnv } from './measureCommand.ts';
 
-const cloudMessage = (model: string) => `${model} runs on Ollama's servers, not on this computer, so there is nothing of this PC to check, and the prompts would leave it. rigmatch-fit --endurance runs local models only.`;
+const cloudMessage = (model: string) => `${model} runs on Ollama's servers, not on this computer, so there is nothing of this computer to check, and the prompts would leave it. rigmatch-fit --endurance runs local models only.`;
 const embeddingMessage = (model: string) => `${model} is an embedding model: it turns text into numbers for search and writes no text, so there is nothing for the check to time. rigmatch-fit --endurance checks models that write text.`;
 
 /**
@@ -43,7 +43,7 @@ export async function runEnduranceCommand({ model, json }: { model: string; json
   const loaded = ((await fetchJson(`${baseUrl}/api/ps`, {}, 3000)) as { models?: Array<{ name?: string }> }).models ?? [];
   if (loaded.length) {
     const who = loaded.map((entry) => entry.name).filter(Boolean).join(', ');
-    throw new Error(`Ollama has ${who} loaded by another program. It shares the graphics card and would slow the check, so rigmatch-fit leaves it alone and does not start. Ollama lets an idle model go after about five minutes; close what is using it or wait, then run again.`);
+    throw new Error(`Ollama has ${who} loaded by another program. It shares the GPU and would slow the check, so rigmatch-fit leaves it alone and does not start. Ollama lets an idle model go after about five minutes; close what is using it or wait, then run again.`);
   }
 
   const hardware = await env.detectHardware();
@@ -96,7 +96,7 @@ export async function runEnduranceCommand({ model, json }: { model: string; json
     const report = { ...measured, card };
     if (output.hasProgress()) endProgress(formatEnduranceDone(report));
     if (!json) say('');
-    out.write(`${json ? JSON.stringify(toEnduranceJson(report, hardware, env.version), null, 2) : formatEnduranceReport(report, { show, columns, header })}\n`);
+    out.write(`${json ? JSON.stringify(toEnduranceJson(report, hardware, env.version), null, 2) : formatEnduranceReport(report, { show, columns, header, sharedMemory: hardware.unifiedMemory })}\n`);
     if (interrupt.signal.aborted) return 130;
     // A check that could not conclude is not a result either.
     return report.status === 'measured' && report.result.verdict.kind !== 'unchecked' ? 0 : 1;

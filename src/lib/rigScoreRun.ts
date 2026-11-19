@@ -15,6 +15,7 @@ import {
   RIG_TIERS,
   RIG_WORKLOAD,
   measureTier,
+  tierNeedsGb,
   tiersThatFit,
   type RigRun,
   type RigStamp,
@@ -144,16 +145,21 @@ export type TierAvailability =
   /** Not installed: the screen offers the download, which the person starts. */
   | { kind: 'needs-download'; sizeGb: number }
   /** The card cannot hold it: "not run", never zero. */
-  | { kind: 'too-big'; needGb: number; haveGb: number };
+  | { kind: 'too-big'; needGb: number; haveGb: number; shared?: boolean };
 
 export type RigMachineFit = { vramGb: number; isUnifiedMemory?: boolean };
 
 export function tierAvailability(tier: RigTier, machine: RigMachineFit, installed: readonly string[]): TierAvailability {
   if (!tiersThatFit(machine.vramGb, machine.isUnifiedMemory).some((fit) => fit.id === tier.id)) {
-    return { kind: 'too-big', needGb: tier.minVramGb, haveGb: machine.vramGb };
+    return { kind: 'too-big', needGb: tierNeedsGb(tier, machine.isUnifiedMemory), haveGb: machine.vramGb, ...(machine.isUnifiedMemory ? { shared: true } : {}) };
   }
   if (!installed.includes(tier.model)) return { kind: 'needs-download', sizeGb: tier.sizeGb };
   return { kind: 'ready' };
+}
+
+/** Why a tier is not run, for a table cell: "Not run: needs 26 GB of shared memory, and this computer has 16 GB." */
+export function tooBigText({ needGb, haveGb, shared }: { needGb: number; haveGb: number; shared?: boolean }): string {
+  return `Not run: needs ${needGb} GB of ${shared ? 'shared' : 'graphics'} memory, and this computer has ${formatGb(haveGb)}.`;
 }
 
 /** "Run all": every tier this PC can hold and already has, smallest first. */
@@ -204,11 +210,11 @@ function failureFor(target: RigTarget, reply: Exclude<RigRunReply, RigDoneReply>
         message: `${target.model} is not installed.${target.sizeGb ? ` It is a ${formatGb(target.sizeGb)} download.` : ''}`,
       };
     case 'too-big': {
-      if (reply.error || !target.minVramGb) return { kind: 'too-big', message: `Not run: ${target.model} did not fit in this PC's memory.` };
+      if (reply.error || !target.minVramGb) return { kind: 'too-big', message: `Not run: ${target.model} did not fit in this computer's memory.` };
       const have = reply.machine?.vramGb;
       return {
         kind: 'too-big',
-        message: `Not run: the ${target.label} tier needs ${target.minVramGb} GB of graphics memory${have ? `, and this PC has ${formatGb(have)}` : ''}.`,
+        message: `Not run: the ${target.label} tier needs ${target.minVramGb} GB of graphics memory${have ? `, and this computer has ${formatGb(have)}` : ''}.`,
       };
     }
     case 'busy':

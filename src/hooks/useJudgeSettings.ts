@@ -1,15 +1,15 @@
 // RigMatch — Copyright (c) 2026 Dave Euson. All Rights Reserved. See LICENSE.
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import {
   CLOUD_JUDGE_MODEL_STORAGE_KEY,
   DEFAULT_CLOUD_JUDGE_MODEL,
   JUDGE_MODEL_STORAGE_KEY,
   JUDGE_SOURCE_STORAGE_KEY,
-  OPENROUTER_KEY_STORAGE_KEY,
   QUALITY_MODE_STORAGE_KEY,
 } from '../lib/appConfig';
 import { textJudgeCandidates } from '../lib/modelCatalog';
+import { loadOpenRouterKey, saveOpenRouterKey, type OpenRouterKeyPlace } from '../lib/openRouterKey';
 import type { ModelRow } from '../types';
 
 export type JudgeConfig = { provider: 'local' | 'openrouter'; model: string; apiKey?: string };
@@ -55,10 +55,20 @@ export function useJudgeSettings({ installedRows, vramGb }: { installedRows: Mod
     try { return localStorage.getItem(CLOUD_JUDGE_MODEL_STORAGE_KEY) ?? DEFAULT_CLOUD_JUDGE_MODEL; }
     catch { return DEFAULT_CLOUD_JUDGE_MODEL; }
   });
-  const [openRouterKey, setOpenRouterKey] = useState<string>(() => {
-    try { return localStorage.getItem(OPENROUTER_KEY_STORAGE_KEY) ?? ''; }
-    catch { return ''; }
-  });
+  // Encrypted by the system where it can be (openRouterKey.ts), so it arrives
+  // a moment after the first render; nothing is saved before it has.
+  const [openRouterKey, setOpenRouterKey] = useState<string>('');
+  const keyPlace = useRef<OpenRouterKeyPlace | null>(null);
+  useEffect(() => {
+    let live = true;
+    const storage = (() => { try { return localStorage; } catch { return null; } })();
+    void loadOpenRouterKey(window.agentArcade?.secrets, storage).then(({ value, place }) => {
+      if (!live) return;
+      keyPlace.current = place;
+      setOpenRouterKey(value);
+    });
+    return () => { live = false; };
+  }, []);
 
   // Text-capable models only, the ones that fit this computer first, then
   // largest first — not simply the biggest file: an embedding or OCR model is
@@ -119,7 +129,10 @@ export function useJudgeSettings({ installedRows, vramGb }: { installedRows: Mod
     try { localStorage.setItem(CLOUD_JUDGE_MODEL_STORAGE_KEY, cloudJudgeModel); } catch { /* ignore */ }
   }, [cloudJudgeModel]);
   useEffect(() => {
-    try { localStorage.setItem(OPENROUTER_KEY_STORAGE_KEY, openRouterKey); } catch { /* ignore */ }
+    const place = keyPlace.current;
+    if (!place) return;
+    const storage = (() => { try { return localStorage; } catch { return null; } })();
+    void saveOpenRouterKey(window.agentArcade?.secrets, storage, place, openRouterKey).then((now) => { keyPlace.current = now; });
   }, [openRouterKey]);
 
   /**
@@ -136,6 +149,9 @@ export function useJudgeSettings({ installedRows, vramGb }: { installedRows: Mod
     setJudgeSource('local');
     setCloudJudgeModel(DEFAULT_CLOUD_JUDGE_MODEL);
     setOpenRouterKey('');
+    // The sweep clears local storage only; the encrypted copy is cleared here,
+    // even when the field was already empty.
+    void window.agentArcade?.secrets?.set('openrouter-key', '').catch(() => undefined);
   }, []);
 
   return {
