@@ -5,6 +5,7 @@ import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
 const {
+  OLLAMA_FAMILY_TAG_LIMIT,
   parseOllamaFamilyFacts,
   parseOllamaRowFacts,
   parseOllamaFamilyRows,
@@ -114,6 +115,52 @@ test('snapshot: fills what the live scan did not reach, and the live page wins',
   assert.equal(cloud.tag, 'cloud', 'a family with no local size is named by its cloud tag, which every cloud check reads');
   assert.equal(cloud.id, 'kimi-k2.6:cloud');
   assert.equal(cloud.cloudOnly, true);
+});
+
+// What getOllamaCatalog makes of a family it listed but did not open: the
+// library page named it, and its own page was past the detail limit.
+const unopened = (name) => ({
+  id: `${name}:latest`, name, tag: 'latest', params: 'Unknown', sizeGb: null, pack: 'Live Family', source: 'Ollama library', live: true, pulls: 1200,
+});
+
+test('snapshot: a family the scan listed but did not open gets every size its page lists', () => {
+  // gemma4 slid past the detail limit as newer families were published, and
+  // the Models list was left with gemma4:latest and no other size to pick.
+  const page = familyPage('gemma4', {
+    badges: ['vision', 'tools', 'thinking', 'audio', 'cloud'],
+    description: 'Gemma 4',
+    sizes: [
+      { tag: '12b', size: '7.7GB', inputs: 'Text, Image' },
+      { tag: '31b-cloud', size: '-', inputs: 'Text, Image' },
+      { tag: 'e2b', size: '4.6GB', inputs: 'Text, Image' },
+      { tag: 'latest', size: '6.6GB', inputs: 'Text, Image' },
+    ],
+  });
+  const snapshot = { families: { gemma4: { ...parseOllamaFamilyFacts(page), sizes: parseOllamaFamilySizes('gemma4', page) } } };
+  const rows = applyCapabilitySnapshot([unopened('gemma4')], snapshot);
+  assert.deepEqual(rows.map((row) => row.id), ['gemma4:latest', 'gemma4:e2b', 'gemma4:12b', 'gemma4:31b-cloud']);
+  assert.deepEqual(
+    rows,
+    parseOllamaFamilyRows('gemma4', page).map((row) => ({ ...row, pulls: 1200 })),
+    'the rows are the ones its opened page would have given',
+  );
+});
+
+test('snapshot: only an unopened family is given rows, and no more than an opened page gives', () => {
+  const many = Object.fromEntries(Array.from({ length: 25 }, (_, at) => [`${at + 1}b`, { inputs: ['text'], sizeGb: at + 1 }]));
+  const snapshot = { families: {
+    gemma3: { badges: ['vision'], sizes: { '1b': { inputs: ['text'], sizeGb: 0.8 }, '4b': { inputs: ['text', 'image'], sizeGb: 3.3 } } },
+    'x/flux2-klein': { badges: [], description: 'Image-generation models.', sizes: {} },
+    wizardlm: { badges: [], sizes: many },
+  } };
+  const bundled = { id: 'gemma3:4b', name: 'gemma3', tag: '4b', sizeGb: 3.3, pack: 'Balanced', source: 'Bundled catalog', live: false };
+  const rows = applyCapabilitySnapshot([bundled, unopened('mystery'), unopened('x/flux2-klein'), unopened('wizardlm')], snapshot);
+  assert.deepEqual(rows.slice(0, 3).map((row) => row.id), ['gemma3:4b', 'mystery:latest', 'x/flux2-klein:latest'],
+    'a bundled size, a family the snapshot does not know and one with no sizes stay one row each');
+  const wizard = rows.slice(3);
+  assert.equal(wizard.length, OLLAMA_FAMILY_TAG_LIMIT, 'capped like an opened page');
+  assert.equal(wizard[0].id, 'wizardlm:1b', 'smallest first');
+  assert.equal(new Set(rows.map((row) => row.id)).size, rows.length, 'no id twice');
 });
 
 test('the shipped snapshot is readable and covers the catalog', () => {

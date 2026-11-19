@@ -301,6 +301,37 @@ function parseOllamaFamilyRows(name, html) {
 }
 
 /**
+ * The rows parseOllamaFamilyRows would have made from a family's page, built
+ * from the snapshot's record of that page instead: the same fields, order and
+ * limit. `entry` is the family's one unopened row, and carries what the
+ * library listing said about it (its pulls).
+ */
+function snapshotFamilyRows(entry, facts) {
+  const rows = Object.entries(facts.sizes ?? {}).filter(([tag]) => isValidOllamaTag(tag)).map(([tag, size]) => {
+    const sizeGb = size.sizeGb ?? null;
+    const capabilities = ollamaCapabilitiesFor({
+      name: entry.name,
+      tag,
+      inputs: size.inputs ?? null,
+      badges: facts.badges ?? [],
+      description: facts.description ?? '',
+    });
+    return {
+      ...entry,
+      id: `${entry.name}:${tag}`,
+      tag,
+      params: inferParamsFromTag(tag, sizeGb),
+      sizeGb,
+      pack: tag === 'latest' ? 'Live Latest' : 'Live Tag',
+      ...(capabilities ? { capabilities } : {}),
+      ...(facts.description ? { description: facts.description } : {}),
+      ...(size.cloudOnly ? { cloudOnly: true } : {}),
+    };
+  });
+  return sortOllamaFamilyRows(rows).slice(0, OLLAMA_FAMILY_TAG_LIMIT);
+}
+
+/**
  * Fills in what the live scan did not reach — families past the detail limit,
  * and the bundled list when offline — from the snapshot taken at release time
  * (electron/ollamaCapabilities.json, written by
@@ -310,8 +341,12 @@ function parseOllamaFamilyRows(name, html) {
  * the family's real cloud tag: every cloud check in the app reads the tag.
  *
  * A family the scan listed but did not open arrives as one "latest" row with
- * no size, which "Good fit" cannot place and so hid: qwen2.5vl and llama4
- * were missing from Reads images that way. The snapshot's size fills it.
+ * no size. It is replaced by the rows its page would have given, one for each
+ * size in the snapshot (snapshotFamilyRows). Filling in that one row's size
+ * was not enough: the scan opens the newest families only, so gemma4 slid
+ * past the limit as newer ones were published and was left with gemma4:latest
+ * and no other size to pick. A family the snapshot has no sizes for keeps its
+ * one row.
  *
  * A bundled row (live: false) takes the snapshot's size over its own. The
  * bundled sizes are typed by hand and drift as ollama.com rebuilds a tag:
@@ -319,10 +354,14 @@ function parseOllamaFamilyRows(name, html) {
  */
 function applyCapabilitySnapshot(entries, snapshot) {
   const families = snapshot?.families ?? {};
-  return entries.map((entry) => {
+  return entries.flatMap((entry) => {
     if (entry.capabilities) return entry;
     const facts = families[String(entry.name || '').toLowerCase()];
     if (!facts) return entry;
+    if (entry.pack === 'Live Family' && entry.sizeGb == null) {
+      const rows = snapshotFamilyRows(entry, facts);
+      if (rows.length) return rows;
+    }
     const sizes = facts.sizes ?? {};
     const tags = Object.keys(sizes);
     let tag = entry.tag;
