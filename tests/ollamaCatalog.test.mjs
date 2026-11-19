@@ -7,6 +7,8 @@ const require = createRequire(import.meta.url);
 const {
   parseOllamaFamilyRows,
   parseSizeToGb,
+  parseSizeRangeGb,
+  buildSizesFromRange,
   decimalGbToGiB,
   catalogSizesInGiB,
   inferParamsFromTag,
@@ -174,4 +176,34 @@ test('extractOllamaNamespaceModels: finds /x/<name> links, skips /tags sub-paths
 
   assert.deepEqual(models.map((m) => m.name).sort(), ['x/flux2-klein', 'x/z-image-turbo']);
   assert.ok(models.every((m) => m.pulls === null));
+});
+
+test('parseSizeRangeGb: both ends of a row that lists two sizes, and null for a row with one', () => {
+  assert.deepEqual(parseSizeRangeGb('gemma4:e4b 6.6GB - 9.5GB · 128K context window'), [6.6, 9.5]);
+  assert.deepEqual(parseSizeRangeGb('16GB - 19GB'), [16, 19]);
+  assert.deepEqual(parseSizeRangeGb('815MB - 1.2GB'), [0.8, 1.2]);
+  assert.equal(parseSizeRangeGb('7.5GB · 128K context window'), null);
+  assert.equal(parseSizeRangeGb('gemma4:cloud - · 256K context window'), null, 'a cloud row has a dash and no size');
+  assert.equal(parseSizeRangeGb(null), null);
+});
+
+test('buildSizesFromRange: the registry names the GGUF end, else the MLX twin names its own, else both get the bigger', () => {
+  // gemma4:e4b lists "6.6GB - 9.5GB" and is 6.58 GB as GGUF, so a Mac gets the 9.5.
+  assert.deepEqual(buildSizesFromRange([6.6, 9.5], { ggufGb: 6.58 }), { sizeGb: 6.6, appleSizeGb: 9.5 });
+  // gemma4:26b lists "16GB - 19GB" and is 18.73 GB as GGUF. Read as "the first
+  // figure", a PC was told 16; its "-mlx" twin (18) is neither end.
+  assert.deepEqual(buildSizesFromRange([16, 19], { ggufGb: 18.73, mlxGb: 18 }), { sizeGb: 19, appleSizeGb: 16 });
+  // With no registry, gemma4:12b's "-mlx" twin is 7.7, so the 8.0 is the PC's.
+  assert.deepEqual(buildSizesFromRange([7.7, 8], { mlxGb: 7.7 }), { sizeGb: 8, appleSizeGb: 7.7 });
+  assert.deepEqual(buildSizesFromRange([6.6, 9.5], { mlxGb: 9.5 }), { sizeGb: 6.6, appleSizeGb: 9.5 });
+  // Nothing says which is which: both get the size that is safe to plan for.
+  assert.deepEqual(buildSizesFromRange([16, 19], { mlxGb: 18 }), { sizeGb: 19, appleSizeGb: 19 });
+  assert.deepEqual(buildSizesFromRange([16, 19], { ggufGb: 12 }), { sizeGb: 19, appleSizeGb: 19 }, 'a registry size that is neither end is not believed');
+  assert.deepEqual(buildSizesFromRange([16, 19]), { sizeGb: 19, appleSizeGb: 19 });
+});
+
+test('catalogSizesInGiB: an Apple chip is given the size of its own build, and no row keeps the spare one', () => {
+  const rows = [{ id: 'gemma4:e4b', sizeGb: 6.6, appleSizeGb: 9.5 }, { id: 'qwen3:8b', sizeGb: 5.2 }, { id: 'x:cloud', sizeGb: null }];
+  assert.deepEqual(catalogSizesInGiB(rows), [{ id: 'gemma4:e4b', sizeGb: 6.1 }, { id: 'qwen3:8b', sizeGb: 4.8 }, { id: 'x:cloud', sizeGb: null }]);
+  assert.deepEqual(catalogSizesInGiB(rows, { apple: true }), [{ id: 'gemma4:e4b', sizeGb: 8.8 }, { id: 'qwen3:8b', sizeGb: 4.8 }, { id: 'x:cloud', sizeGb: null }]);
 });

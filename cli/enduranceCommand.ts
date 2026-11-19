@@ -8,7 +8,7 @@
  */
 import security from '../electron/security.cjs';
 import { isEmbeddingModel } from '../src/lib/modelCatalog.ts';
-import { catalogRows, rankModels } from './fitCheck.ts';
+import { catalogFor, rankModels } from './fitCheck.ts';
 import {
   baselineOf, formatEnduranceDone, formatEnduranceIntro, formatEnduranceProgress, formatEnduranceReport, measureEndurance, runEnduranceRequest, toEnduranceJson,
 } from './endurance.ts';
@@ -47,7 +47,7 @@ export async function runEnduranceCommand({ model, json }: { model: string; json
   }
 
   const hardware = await env.detectHardware();
-  const entry = rankModels(catalogRows(), hardware, { installed }).find((candidate) => candidate.row.name === name || candidate.row.aliases?.includes(name));
+  const entry = rankModels(catalogFor(hardware), hardware, { installed }).find((candidate) => candidate.row.name === name || candidate.row.aliases?.includes(name));
   const estimateTps = entry?.grade.tokensPerSecond ?? null;
   const show = Boolean(out.isTTY) && !json;
   const columns = out.isTTY ? out.columns : undefined;

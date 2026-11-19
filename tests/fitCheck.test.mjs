@@ -6,7 +6,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const { catalogRows, formatTable, rankModels, inDefaultList, ollamaUrl, toJson } = await import('../cli/fitCheck.ts');
+const { catalogFor, catalogRows, formatTable, rankModels, inDefaultList, ollamaUrl, toJson } = await import('../cli/fitCheck.ts');
 
 /**
  * The command-line fit check: which models it lists, how it ranks and marks
@@ -426,4 +426,34 @@ test('an installed copy squeezed below 4 bits is graded on Ollama\'s own label f
   } finally {
     server.close();
   }
+});
+
+test('a Mac is listed the build a Mac downloads, and every other computer the other one', () => {
+  // A tag can hold two builds. gemma4:e4b is 6.6 GB as GGUF and 9.5 as MLX,
+  // and gemma4:26b 19 and 16: the snapshot records both (appleSizeGb).
+  const families = { gemma4: { badges: [], sizes: {
+    e4b: { inputs: ['text'], sizeGb: 6.6, appleSizeGb: 9.5 },
+    '26b': { inputs: ['text'], sizeGb: 19, appleSizeGb: 16 },
+    '12b': { inputs: ['text'], sizeGb: 8 },
+  } } };
+  const sizes = (rows) => Object.fromEntries(rows.map((row) => [row.name, row.sizeGb]));
+  assert.deepEqual(sizes(catalogRows(families)), { 'gemma4:e4b': 6.1, 'gemma4:26b': 17.7, 'gemma4:12b': 7.5 });
+  assert.deepEqual(sizes(catalogRows(families, { apple: true })), { 'gemma4:e4b': 8.8, 'gemma4:26b': 14.9, 'gemma4:12b': 7.5 });
+
+  // The shipped snapshot, whatever it lists today: only an Apple chip gets those sizes.
+  assert.deepEqual(catalogFor(card), catalogRows());
+  assert.deepEqual(catalogFor({ platform: 'darwin', arch: 'x64' }), catalogRows(), 'an Intel Mac has no MLX');
+  assert.deepEqual(catalogFor({ platform: 'linux', arch: 'arm64' }), catalogRows(), 'nor has a Jetson');
+  const onMac = catalogFor({ platform: 'darwin', arch: 'arm64' });
+  const shipped = JSON.parse(readFileSync(join(root, 'electron', 'ollamaCapabilities.json'), 'utf8')).families;
+  let checked = 0;
+  for (const row of onMac) {
+    const [family, tag] = row.name.split(':');
+    const size = shipped[family].sizes[tag];
+    if (!size.appleSizeGb) continue;
+    checked += 1;
+    assert.equal(row.sizeGb, Math.round(((size.appleSizeGb * 1e9) / 1024 ** 3) * 10) / 10, `${row.name} on a Mac`);
+    assert.notEqual(size.appleSizeGb, size.sizeGb, `${row.name}: recorded only where the two differ`);
+  }
+  assert.ok(checked > 0, 'the shipped snapshot has tags with two builds');
 });

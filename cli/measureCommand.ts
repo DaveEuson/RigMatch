@@ -11,7 +11,7 @@
 import type { EventEmitter } from 'node:events';
 import probe from '../electron/gpuProbe.cjs';
 import security from '../electron/security.cjs';
-import { catalogRows, rankModels, type FitHardware, type InstalledModel } from './fitCheck.ts';
+import { catalogFor, rankModels, type FitHardware, type InstalledModel } from './fitCheck.ts';
 import {
   CLOUD_TAG, UNLOAD_SETTLE_MS, checkCard, cloudMessage, fitLine, formatIntro, formatModelDone, formatModelIntro, formatModelReport, formatProgress,
   formatReport, formatTierDone, isCloudModel, measureModel, measureTiers, planTiers, runRequest, toMeasureJson, toModelJson,
@@ -146,7 +146,7 @@ export async function runMeasureCommand({ model, json }: { model: string | undef
   }
 
   const hardware = await env.detectHardware();
-  const ranked = rankModels(catalogRows(), hardware, { installed });
+  const ranked = rankModels(catalogFor(hardware), hardware, { installed });
   const estimates = new Map(ranked.map((entry) => [entry.row.name, entry.grade.tokensPerSecond ?? null] as const));
   const show = Boolean(out.isTTY) && !json;
   const columns = out.isTTY ? out.columns : undefined;

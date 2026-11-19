@@ -25,7 +25,7 @@ import { parseArgs } from 'node:util';
 import si from 'systeminformation';
 import pkg from './package.json' with { type: 'json' };
 import systemProfile from '../electron/systemProfile.cjs';
-import { catalogRows, formatTable, ollamaUrl, rankModels, toJson, type FitHardware, type Provider } from './fitCheck.ts';
+import { catalogFor, formatTable, ollamaUrl, rankModels, toJson, type FitHardware, type Provider } from './fitCheck.ts';
 import { checkEnduranceArgs } from './endurance.ts';
 import { runEnduranceCommand } from './enduranceCommand.ts';
 import { checkMeasureArgs } from './measure.ts';
@@ -175,7 +175,7 @@ async function main(): Promise<number> {
   if (values.installed && !ollamaReachable) {
     throw new Error(`Ollama did not answer at ${ollamaUrl()}, so there is nothing installed to list. Start Ollama, or leave out --installed.`);
   }
-  const models = rankModels(catalogRows(), hardware, { installed, provider });
+  const models = rankModels(catalogFor(hardware), hardware, { installed, provider });
   console.log(values.json
     ? JSON.stringify(toJson(values.installed ? models.filter((model) => model.installed) : models, hardware, { provider, ollamaReachable, version: pkg.version }), null, 2)
     : formatTable(models, hardware, {

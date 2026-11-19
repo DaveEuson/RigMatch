@@ -88,7 +88,8 @@ export type RankedModel = {
   kind: NonChatKind | null;
 };
 
-type SnapshotSize = { inputs?: string[]; sizeGb?: number; cloudOnly?: boolean };
+/** `appleSizeGb`: what an Apple chip downloads for this tag, where that is not `sizeGb` (the MLX build). */
+type SnapshotSize = { inputs?: string[]; sizeGb?: number; appleSizeGb?: number; cloudOnly?: boolean };
 type SnapshotFamily = { badges: string[]; description?: string; sizes: Record<string, SnapshotSize> };
 
 /** The catalog's own reading of a family page (electron/ollamaCatalog.cjs), typed for this file. */
@@ -111,8 +112,13 @@ const toGiB = ollamaCatalog.decimalGbToGiB as (decimalGb: number) => number;
  * Embedding models, image makers and speech models are left out: the question
  * here is which model to chat with. Decision models (kev, d3) stay in, marked,
  * for --all and --installed: they are real models, just not chat ones.
+ *
+ * `apple` sizes each row as an Apple chip downloads it (see catalogFor).
  */
-export function catalogRows(families: Record<string, SnapshotFamily> = snapshot.families as Record<string, SnapshotFamily>): CatalogRow[] {
+export function catalogRows(
+  families: Record<string, SnapshotFamily> = snapshot.families as Record<string, SnapshotFamily>,
+  { apple = false }: { apple?: boolean } = {},
+): CatalogRow[] {
   const rows: CatalogRow[] = [];
   for (const [family, facts] of Object.entries(families)) {
     const sizes = Object.entries(facts.sizes ?? {}).filter(([, size]) => !size.cloudOnly && (size.sizeGb ?? 0) > 0);
@@ -127,14 +133,24 @@ export function catalogRows(families: Record<string, SnapshotFamily> = snapshot.
       }) ?? undefined;
       // "Latest" and "Unknown" are labels, not sizes; the grade reads the download instead.
       const params = ollamaCatalog.inferParamsFromTag(tag, size.sizeGb);
+      const listedGb = (apple && size.appleSizeGb) || size.sizeGb || 0;
       const row: CatalogRow = {
-        name, displayName: name, params: /^\d/.test(params) ? params : '', sizeGb: toGiB(size.sizeGb ?? 0), capabilities,
+        name, displayName: name, params: /^\d/.test(params) ? params : '', sizeGb: toGiB(listedGb), capabilities,
         description: facts.description, ...(twin && twin[0] === tag ? { aliases: [`${family}:latest`] } : {}),
       };
       if (isListed(row)) rows.push(row);
     }
   }
   return rows;
+}
+
+/**
+ * The catalog as this computer downloads it. A tag can hold two builds:
+ * Ollama gives an Apple chip the MLX one, which is not the size the other
+ * build is (gemma4:e4b is 6.6 GB on a PC and 9.5 GB on a Mac).
+ */
+export function catalogFor(hardware: Pick<FitHardware, 'platform' | 'arch'>): CatalogRow[] {
+  return catalogRows(undefined, { apple: hardware.platform === 'darwin' && hardware.arch === 'arm64' });
 }
 
 /** Worth a row in the list: a chat model, or a decision model shown as what it is. */
