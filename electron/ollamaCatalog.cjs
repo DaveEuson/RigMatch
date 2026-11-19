@@ -77,6 +77,46 @@ function parseSizeToGb(detail) {
     : Math.round(value * 10) / 10;
 }
 
+/** Both ends of a row that lists two sizes ("6.6GB - 9.5GB"), smaller first; null for a row with one. */
+function parseSizeRangeGb(detail) {
+  const match = String(detail || '').match(/(\d+(?:\.\d+)?\s*(?:GB|MB))\s*-\s*(\d+(?:\.\d+)?\s*(?:GB|MB))/i);
+  if (!match) return null;
+  const [low, high] = [parseSizeToGb(match[1]), parseSizeToGb(match[2])];
+  return low && high && low < high ? [low, high] : null;
+}
+
+/** The listing rounds to two figures, so a 18.73 GB build is listed as "19GB". */
+const LISTED_SIZE_SLACK_GB = 0.6;
+
+/**
+ * Which end of a two-size row each kind of computer downloads.
+ *
+ * A row lists two sizes when its tag holds two builds. Ollama gives an Apple
+ * chip the MLX build and every other computer the GGUF one, and either can be
+ * the bigger: gemma4:e4b is 6.6 GB as GGUF and 9.5 as MLX, gemma4:12b is 8.0
+ * and 7.7. Reading the first figure for everyone listed gemma4:e4b 2.9 GB
+ * small on a Mac, and gemma4:26b 2.7 GB small on a PC. The page does not say
+ * which end is which, so, in order:
+ *  - `ggufGb`, the GGUF build's own size where the caller has it (the snapshot
+ *    script reads it from the registry), names its end, and the other is MLX;
+ *  - `mlxGb`, the size of the tag's "-mlx" twin on the same page, names the MLX
+ *    end when it equals one;
+ *  - otherwise both get the bigger end: what fits at that size fits either way.
+ *
+ * `sizeGb` is what a computer other than a Mac downloads, `appleSizeGb` what an
+ * Apple chip does.
+ */
+function buildSizesFromRange([low, high], { ggufGb = null, mlxGb = null } = {}) {
+  if (ggufGb > 0 && Math.min(Math.abs(ggufGb - low), Math.abs(ggufGb - high)) <= LISTED_SIZE_SLACK_GB) {
+    return Math.abs(ggufGb - low) <= Math.abs(ggufGb - high)
+      ? { sizeGb: low, appleSizeGb: high }
+      : { sizeGb: high, appleSizeGb: low };
+  }
+  if (mlxGb === low) return { sizeGb: high, appleSizeGb: low };
+  if (mlxGb === high) return { sizeGb: low, appleSizeGb: high };
+  return { sizeGb: high, appleSizeGb: high };
+}
+
 /**
  * ollama.com's sizes are decimal GB (5.2 GB is 5.2 billion bytes). Graphics
  * memory, free disk, download progress and Ollama's own sizes for installed
@@ -88,9 +128,16 @@ function decimalGbToGiB(decimalGb) {
   return Math.round(((decimalGb * 1e9) / 1024 ** 3) * 10) / 10;
 }
 
-/** Catalog rows with their listed sizes in GiB. Rows with no size keep none. */
-function catalogSizesInGiB(entries) {
-  return entries.map((entry) => (entry.sizeGb > 0 ? { ...entry, sizeGb: decimalGbToGiB(entry.sizeGb) } : entry));
+/**
+ * Catalog rows with their listed sizes in GiB, each the size this kind of
+ * computer downloads: `apple` picks a row's Apple-chip size where it has one
+ * (buildSizesFromRange). Rows with no size keep none.
+ */
+function catalogSizesInGiB(entries, { apple = false } = {}) {
+  return entries.map(({ appleSizeGb, ...entry }) => {
+    const listed = apple && appleSizeGb > 0 ? appleSizeGb : entry.sizeGb;
+    return listed > 0 ? { ...entry, sizeGb: decimalGbToGiB(listed) } : entry;
+  });
 }
 
 /**
@@ -218,8 +265,15 @@ function ollamaCapabilitiesFor({ name, tag, inputs, badges = [], description = '
   return capabilities;
 }
 
-/** Every size linked on a family page, with what it accepts, unsorted. */
-function scanOllamaFamilyRows(name, source) {
+/**
+ * Every size linked on a family page, with what it accepts, unsorted.
+ *
+ * A row that lists two sizes keeps both in `sizeRangeGb` and is given the size
+ * each kind of computer downloads (buildSizesFromRange): `sizeGb`, and
+ * `appleSizeGb` where an Apple chip's differs. `ggufSizes` is the GGUF build's
+ * size by tag, for a caller that has read it.
+ */
+function scanOllamaFamilyRows(name, source, ggufSizes = {}) {
   const rows = [];
   const byKey = new Map();
   // "x/" namespace models are served from /x/<name>, not /library/<name>.
@@ -256,12 +310,14 @@ function scanOllamaFamilyRows(name, source) {
     }
 
     const sizeGb = parseSizeToGb(detail);
+    const sizeRangeGb = parseSizeRangeGb(detail);
     const row = {
       id: key,
       name,
       tag,
       params: inferParamsFromTag(tag, sizeGb),
       sizeGb,
+      ...(sizeRangeGb ? { sizeRangeGb } : {}),
       pack: tag === 'latest' ? 'Live Latest' : 'Live Tag',
       source: 'Ollama library',
       live: true,
@@ -271,16 +327,35 @@ function scanOllamaFamilyRows(name, source) {
     byKey.set(key, row);
     rows.push(row);
   }
+
+  const ranged = rows.filter((row) => row.sizeRangeGb);
+  const sameRange = (a, b) => a.sizeRangeGb[0] === b.sizeRangeGb[0] && a.sizeRangeGb[1] === b.sizeRangeGb[1];
+  // "latest" has no "-mlx" twin of its own: it is one of the sizes under
+  // another name, so it takes that size's answer.
+  for (const row of [...ranged.filter((each) => each.tag !== 'latest'), ...ranged.filter((each) => each.tag === 'latest')]) {
+    const named = row.tag === 'latest' ? ranged.find((other) => other !== row && sameRange(other, row)) : null;
+    const sizes = named
+      ? { sizeGb: named.sizeGb, appleSizeGb: named.appleSizeGb ?? named.sizeGb }
+      : buildSizesFromRange(row.sizeRangeGb, { ggufGb: ggufSizes[row.tag], mlxGb: byKey.get(`${name}:${row.tag}-mlx`)?.sizeGb });
+    row.sizeGb = sizes.sizeGb;
+    if (sizes.appleSizeGb !== sizes.sizeGb) row.appleSizeGb = sizes.appleSizeGb;
+  }
   return rows;
 }
 
+/** The tags of a family page whose rows list two sizes: the ones worth a look at the registry. */
+function rangedOllamaTags(name, html) {
+  return scanOllamaFamilyRows(name, String(html || '')).filter((row) => row.sizeRangeGb).map((row) => row.tag);
+}
+
 /** What each size accepts and weighs, keyed by tag: the snapshot's per-size record. */
-function parseOllamaFamilySizes(name, html) {
-  return Object.fromEntries(scanOllamaFamilyRows(name, String(html || ''))
+function parseOllamaFamilySizes(name, html, ggufSizes = {}) {
+  return Object.fromEntries(scanOllamaFamilyRows(name, String(html || ''), ggufSizes)
     .filter((row) => row.inputs)
     .map((row) => [row.tag, {
       inputs: row.inputs,
       ...(row.sizeGb ? { sizeGb: row.sizeGb } : {}),
+      ...(row.appleSizeGb ? { appleSizeGb: row.appleSizeGb } : {}),
       ...(row.cloudOnly ? { cloudOnly: true } : {}),
     }]));
 }
@@ -288,10 +363,13 @@ function parseOllamaFamilySizes(name, html) {
 function parseOllamaFamilyRows(name, html) {
   const source = String(html || '');
   const facts = parseOllamaFamilyFacts(source);
-  const described = scanOllamaFamilyRows(name, source).map(({ inputs, cloudOnly, ...row }) => {
+  const described = scanOllamaFamilyRows(name, source).map(({ inputs, cloudOnly, sizeRangeGb, ...row }) => {
     const capabilities = ollamaCapabilitiesFor({ name, tag: row.tag, inputs, badges: facts.badges, description: facts.description });
     return {
       ...row,
+      // Two sizes the page alone could not tell apart: kept for the snapshot,
+      // which read the registry, to settle (applyCapabilitySnapshot).
+      ...(sizeRangeGb && !row.appleSizeGb ? { sizeRangeGb } : {}),
       ...(capabilities ? { capabilities } : {}),
       ...(facts.description ? { description: facts.description } : {}),
       ...(cloudOnly ? { cloudOnly: true } : {}),
@@ -322,6 +400,7 @@ function snapshotFamilyRows(entry, facts) {
       tag,
       params: inferParamsFromTag(tag, sizeGb),
       sizeGb,
+      ...(size.appleSizeGb ? { appleSizeGb: size.appleSizeGb } : {}),
       pack: tag === 'latest' ? 'Live Latest' : 'Live Tag',
       ...(capabilities ? { capabilities } : {}),
       ...(facts.description ? { description: facts.description } : {}),
@@ -351,12 +430,22 @@ function snapshotFamilyRows(entry, facts) {
  * A bundled row (live: false) takes the snapshot's size over its own. The
  * bundled sizes are typed by hand and drift as ollama.com rebuilds a tag:
  * smallthinker was listed at 1.2 GB against a real 3.6 GB.
+ *
+ * A live row whose page listed two sizes it could not tell apart
+ * (`sizeRangeGb`) takes the snapshot's answer when the snapshot saw the same
+ * two: it knows which is the Mac's build, from the registry. Otherwise the row
+ * keeps the bigger size for everyone.
  */
 function applyCapabilitySnapshot(entries, snapshot) {
   const families = snapshot?.families ?? {};
-  return entries.flatMap((entry) => {
+  return entries.flatMap(({ sizeRangeGb, ...listed }) => {
+    const facts = families[String(listed.name || '').toLowerCase()];
+    const known = sizeRangeGb ? facts?.sizes?.[listed.tag] : null;
+    const settled = known?.appleSizeGb
+      && Math.min(known.sizeGb, known.appleSizeGb) === sizeRangeGb[0]
+      && Math.max(known.sizeGb, known.appleSizeGb) === sizeRangeGb[1];
+    const entry = settled ? { ...listed, sizeGb: known.sizeGb, appleSizeGb: known.appleSizeGb } : listed;
     if (entry.capabilities) return entry;
-    const facts = families[String(entry.name || '').toLowerCase()];
     if (!facts) return entry;
     if (entry.pack === 'Live Family' && entry.sizeGb == null) {
       const rows = snapshotFamilyRows(entry, facts);
@@ -375,13 +464,15 @@ function applyCapabilitySnapshot(entries, snapshot) {
       badges: facts.badges ?? [],
       description: facts.description ?? '',
     });
+    const takesSize = (entry.sizeGb == null || entry.live === false) && sizes[tag]?.sizeGb;
     return {
       ...entry,
       ...(tag !== entry.tag ? { tag, id: `${entry.name}:${tag}` } : {}),
       ...(capabilities ? { capabilities } : {}),
       ...(facts.description && !entry.description ? { description: facts.description } : {}),
       ...(sizes[tag]?.cloudOnly ? { cloudOnly: true } : {}),
-      ...((entry.sizeGb == null || entry.live === false) && sizes[tag]?.sizeGb ? { sizeGb: sizes[tag].sizeGb } : {}),
+      ...(takesSize ? { sizeGb: sizes[tag].sizeGb } : {}),
+      ...(takesSize && sizes[tag].appleSizeGb ? { appleSizeGb: sizes[tag].appleSizeGb } : {}),
     };
   });
 }
@@ -396,6 +487,8 @@ module.exports = {
   isValidOllamaTag,
   extractOllamaNamespaceModels,
   parseSizeToGb,
+  parseSizeRangeGb,
+  buildSizesFromRange,
   decimalGbToGiB,
   catalogSizesInGiB,
   inferParamsFromTag,
@@ -404,6 +497,7 @@ module.exports = {
   parseOllamaFamilyFacts,
   parseOllamaRowFacts,
   ollamaCapabilitiesFor,
+  rangedOllamaTags,
   parseOllamaFamilySizes,
   parseOllamaFamilyRows,
   applyCapabilitySnapshot,

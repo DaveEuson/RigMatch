@@ -487,3 +487,65 @@ test('on shared memory, a 34B too big for its size class stays an F, not a recom
   assert.equal(unifiedMemoryFit(row('x:8b', '8B', 13.5), mac18)?.tone, 'tight');
   assert.equal(unifiedMemoryFit(row('x:34b', '34B', 19), mac18)?.tone, 'out-of-league');
 });
+
+test('gemma4:26b is the mixture its other name says it is, under every build of it', () => {
+  // ollama.com lists one build as gemma4:26b and as gemma4:26b-a4b. Under the
+  // first name it was graded as a plain 26B: about 4 tok/s on an Apple M4.
+  assert.equal(activeShare('gemma4:26b', 26), 4 / 26);
+  assert.equal(activeShare('gemma4:26b-a4b', 26), 4 / 26);
+  assert.equal(activeShare('gemma4:26b-mlx', 26), 4 / 26, 'the same model, built another way');
+  assert.equal(activeShare('gpt-oss:20b-cloud', 20), 0.18, 'and so for every mixture in the table');
+  assert.equal(activeShare('gemma4:12b', 12), 1);
+  assert.equal(activeShare('gemma4:31b', 31), 1);
+  const card24 = { vramGb: 24 };
+  const mixture = gradeModel(row('gemma4:26b', '26B', 17.7), card24).tokensPerSecond;
+  const plain = gradeModel(row('x:26b', '26B', 17.7), card24).tokensPerSecond;
+  assert.ok(mixture > plain * 3.5, `${mixture} against ${plain} tok/s`);
+});
+
+test('Gemma 4 is estimated near the speed it was measured at, and a tested one does not skew the rest', () => {
+  // RTX 4070, 2026-11-19, timed back to back: llama3.1:8b 86 tok/s, gemma4:12b
+  // 91 and gemma4:e4b 174, where the estimates from size alone were 65, 40 and 49.
+  const tps = (name, params, sizeGb, hardware = rtx4070) => gradeModel(row(name, params, sizeGb), hardware).tokensPerSecond;
+  assert.ok(Math.abs(tps('gemma4:e4b', '4B', 6.1) / tps('x:8b', '8B', 6.1) - 1 / 0.37) < 0.02, 'an "e" size reads 37% of its download for each word');
+  assert.equal(tps('gemma4:latest', '', 6.1), tps('gemma4:e4b', '4B', 6.1), 'latest is the e4b');
+  assert.equal(tps('gemma4:e4b-it-q8_0', '4B', 6.1), tps('gemma4:e4b', '4B', 6.1), 'and so is another build of it');
+  assert.ok(Math.abs(tps('gemma4:12b', '12B', 7.5) / tps('x:12b', '12B', 7.5) - 1 / 0.58) < 0.02, 'the other sizes read 58%');
+  assert.equal(tps('gemma3:4b', '4B', 3.1), tps('x:4b', '4B', 3.1), 'another family is read whole');
+  // An Apple M4 ran its 8.8 GB build of e4b at 32 tok/s; the whole download said 10.
+  const onMac = tps('gemma4:e4b', '4B', 8.8, { gpu: 'Apple M4', vramGb: 16, unifiedMemory: true });
+  assert.ok(onMac > 25 && onMac < 35, `${onMac} tok/s`);
+
+  // What a test says this PC reads a second is the same from either model. It
+  // was 2.7 times as much from the Gemma, and every other estimate rose with it.
+  const fromPlain = rigBandwidth([{ ...row('llama3.1:8b', '8B', 4.6), tokensPerSecond: 86 }], 12);
+  const fromGemma = rigBandwidth([{ ...row('gemma4:e4b', '7.5B', 6.1), tokensPerSecond: 174 }], 12);
+  assert.ok(Math.abs(fromGemma / fromPlain - 1) < 0.05, `${Math.round(fromGemma)} against ${Math.round(fromPlain)} GB a second`);
+});
+
+test('a model that takes nearly all of shared memory is a D at best, and not a recommendation', () => {
+  // On a 16 GB Mac every model from 11.3 to 16 GB was a recommended C "Tight
+  // fit", six of them 15.8 GB. Past 85% the system has too little left.
+  const mac = { gpu: 'Apple M4', vramGb: 16, unifiedMemory: true };
+  const graded = (sizeGb) => {
+    const model = row('x:27b', '27B', sizeGb);
+    const fit = unifiedMemoryFit(model, mac);
+    return { fit, withFit: gradeModel({ ...model, fitOverride: fit }, mac), bare: gradeModel(model, mac) };
+  };
+  const crowded = graded(15.8);
+  assert.equal(crowded.fit.label, 'Barely fits · 15.8 GB');
+  assert.equal(crowded.fit.recommend, false);
+  assert.equal(crowded.fit.detail, 'Takes nearly all of your 16 GB of shared memory, leaving the system too little to run beside it');
+  for (const grade of [crowded.withFit, crowded.bare]) {
+    assert.equal(grade.letter, 'D', `${grade.points} points`);
+    assert.equal(grade.reasons[0], crowded.fit.detail, 'the same words with or without the fit');
+    assert.equal(grade.verdict, 'barely-runs');
+  }
+  // 85% of 16 GB is 13.6 GB. Below it, the fit and the C stand as they were.
+  const tight = graded(13.5);
+  assert.match(tight.fit.label, /^Tight fit/);
+  assert.equal(tight.fit.recommend, true);
+  assert.equal(tight.withFit.letter, 'C', `${tight.withFit.points} points`);
+  assert.equal(graded(13.8).fit.recommend, false);
+  assert.equal(graded(16.1).fit.tone, 'out-of-league');
+});

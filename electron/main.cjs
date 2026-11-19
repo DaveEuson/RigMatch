@@ -2935,10 +2935,13 @@ const OLLAMA_CAPABILITY_SNAPSHOT = (() => {
 
 /**
  * The rows the app is given. Every size in them (the live pages, the bundled
- * list, the snapshot) is ollama.com's decimal GB until here.
+ * list, the snapshot) is ollama.com's decimal GB until here, and a tag with
+ * two builds still has both sizes: an Apple chip is given the MLX build's.
  */
 function catalogModels(entries) {
-  return catalogSizesInGiB(applyCapabilitySnapshot(entries, OLLAMA_CAPABILITY_SNAPSHOT));
+  return catalogSizesInGiB(applyCapabilitySnapshot(entries, OLLAMA_CAPABILITY_SNAPSHOT), {
+    apple: process.platform === 'darwin' && process.arch === 'arm64',
+  });
 }
 
 function mergeCatalogs(liveCatalog, fallback) {

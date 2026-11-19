@@ -10,6 +10,8 @@ const {
   parseOllamaRowFacts,
   parseOllamaFamilyRows,
   parseOllamaFamilySizes,
+  rangedOllamaTags,
+  catalogSizesInGiB,
   ollamaCapabilitiesFor,
   applyCapabilitySnapshot,
 } = require('../electron/ollamaCatalog.cjs');
@@ -197,4 +199,64 @@ test('sizes typed by hand elsewhere in the app match the snapshot, in GiB', asyn
     assert.equal(sizeGb, decimalGbToGiB(listed), `${id} says ${sizeGb} GB; ollama.com lists ${listed} GB, which is ${decimalGbToGiB(listed)} GiB`);
   }
   assert.ok(checked >= 20, `only ${checked} sizes were checked`);
+});
+
+// gemma4's page, November 2026. A tag that holds two builds lists both sizes,
+// smaller first, and the MLX builds have rows of their own. An Apple chip
+// downloads the MLX build of a plain tag; everything else the GGUF one.
+const twoBuilds = familyPage('gemma4', {
+  badges: ['vision'],
+  sizes: [
+    { tag: 'latest', size: '6.6GB - 9.5GB', inputs: 'Text, Image' },
+    { tag: 'e4b', size: '6.6GB - 9.5GB', inputs: 'Text, Image' },
+    { tag: '12b', size: '7.7GB - 8.0GB', inputs: 'Text, Image' },
+    { tag: '26b', size: '16GB - 19GB', inputs: 'Text, Image' },
+    { tag: 'e4b-mlx', size: '9.5GB', inputs: 'Text, Image' },
+    { tag: '12b-mlx', size: '7.7GB', inputs: 'Text, Image' },
+    { tag: '26b-mlx', size: '18GB', inputs: 'Text, Image' },
+  ],
+});
+const sizesOf = (rows) => Object.fromEntries(rows.map((row) => [row.tag, [row.sizeGb, row.appleSizeGb ?? row.sizeGb]]));
+
+test('a tag with two builds is sized for a PC and for a Mac, not by whichever figure comes first', () => {
+  // The first figure was taken for everyone: gemma4:e4b read 6.6 GB on a Mac
+  // that downloaded 9.5, and gemma4:12b read 7.7 on a PC that downloaded 8.0.
+  const rows = parseOllamaFamilyRows('gemma4', twoBuilds);
+  assert.deepEqual(sizesOf(rows), {
+    latest: [6.6, 9.5], e4b: [6.6, 9.5], '12b': [8, 7.7], '26b': [19, 19],
+    'e4b-mlx': [9.5, 9.5], '12b-mlx': [7.7, 7.7], '26b-mlx': [18, 18],
+  }, '[a PC, a Mac]; latest is the e4b under another name; 26b cannot be told from the page, so both get the bigger');
+  assert.deepEqual(rows.find((row) => row.tag === '26b').sizeRangeGb, [16, 19], 'kept for the snapshot to settle');
+  assert.ok(rows.filter((row) => row.tag !== '26b').every((row) => !('sizeRangeGb' in row)));
+
+  // The snapshot script reads the GGUF build's size from the registry, which settles every one.
+  assert.deepEqual(rangedOllamaTags('gemma4', twoBuilds), ['latest', 'e4b', '12b', '26b']);
+  const recorded = parseOllamaFamilySizes('gemma4', twoBuilds, { e4b: 6.58, '12b': 8.02, '26b': 18.73 });
+  assert.deepEqual(recorded['26b'], { inputs: ['text', 'image'], sizeGb: 19, appleSizeGb: 16 });
+  assert.deepEqual(recorded.e4b, { inputs: ['text', 'image'], sizeGb: 6.6, appleSizeGb: 9.5 });
+  assert.deepEqual(recorded.latest, recorded.e4b);
+  assert.deepEqual(recorded['12b-mlx'], { inputs: ['text', 'image'], sizeGb: 7.7 }, 'a row with one size has one');
+});
+
+test('snapshot: both sizes reach a family the scan did not open, a bundled row, and a live row the page could not settle', () => {
+  const snapshot = { families: { gemma4: { badges: ['vision'], sizes: parseOllamaFamilySizes('gemma4', twoBuilds, { e4b: 6.58, '12b': 8.02, '26b': 18.73 }) } } };
+  const inGiB = (entries, apple) => Object.fromEntries(catalogSizesInGiB(applyCapabilitySnapshot(entries, snapshot), { apple }).map((row) => [row.tag, row.sizeGb]));
+
+  const listed = [unopened('gemma4')];
+  assert.deepEqual(inGiB(listed, false), { latest: 6.1, e4b: 6.1, '12b': 7.5, '26b': 17.7, 'e4b-mlx': 8.8, '12b-mlx': 7.2, '26b-mlx': 16.8 });
+  assert.deepEqual(inGiB(listed, true), { latest: 8.8, e4b: 8.8, '12b': 7.2, '26b': 14.9, 'e4b-mlx': 8.8, '12b-mlx': 7.2, '26b-mlx': 16.8 });
+
+  const bundled = [{ id: 'gemma4:26b', name: 'gemma4', tag: '26b', sizeGb: 16, pack: 'Heavyweight', source: 'Bundled catalog', live: false }];
+  assert.deepEqual([inGiB(bundled, false), inGiB(bundled, true)], [{ '26b': 17.7 }, { '26b': 14.9 }]);
+
+  // The page as the live scan reads it: 26b is "16GB - 19GB" with nothing to say which is the Mac's.
+  const live = parseOllamaFamilyRows('gemma4', twoBuilds);
+  assert.deepEqual([inGiB(live, false)['26b'], inGiB(live, true)['26b']], [17.7, 14.9], 'the snapshot saw the same two sizes, and knows');
+  const rebuilt = live.map((row) => (row.tag === '26b' ? { ...row, sizeGb: 21, sizeRangeGb: [17, 21] } : row));
+  assert.deepEqual([inGiB(rebuilt, false)['26b'], inGiB(rebuilt, true)['26b']], [19.6, 19.6], 'a tag rebuilt since keeps the bigger size for everyone');
+  for (const entries of [listed, bundled, live, rebuilt]) {
+    for (const made of [applyCapabilitySnapshot(entries, snapshot), applyCapabilitySnapshot(entries, null)]) {
+      assert.ok(made.every((row) => !('sizeRangeGb' in row)), 'the two-size note never reaches the app');
+    }
+  }
 });

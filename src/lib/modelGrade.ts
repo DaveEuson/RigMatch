@@ -111,6 +111,12 @@ const UNIFIED_BASE_GBPS = 90;
 const SYSTEM_RAM_GBPS = 35;
 /** The share of a Mac's memory a model can use, as videoFit.ts sizes it. */
 const UNIFIED_USABLE_SHARE = 0.7;
+/**
+ * Past this share, a model leaves the system too little to run beside it and
+ * macOS has to swap: a D at best, and not a recommendation. A judgment, not a
+ * measurement. Before it, a 15.8 GB model on a 16 GB Mac was a recommended C.
+ */
+const UNIFIED_CROWDED_SHARE = 0.85;
 const TOKENS_PER_WORD = 4 / 3;
 /**
  * Past this, a small model is held back by the work per word rather than by
@@ -219,7 +225,9 @@ function squeezedBits(row: Pick<GradeRow, 'name' | 'quantization' | 'params' | '
  * whose Ollama tag is a plain size. qwen3:30b is Qwen3-30B-A3B under its
  * library name, gpt-oss:20b runs 3.6B of its 21B, and so on: the tag says
  * nothing, so a table does. Keyed by family:tag, or by family alone for a
- * family with one size. From each model's own card.
+ * family with one size. From each model's own card. gemma4:26b is the build
+ * ollama.com also lists as 26b-a4b, and was graded as a plain 26B: about six
+ * times too slow.
  */
 const MIXTURE_ACTIVE_B: Record<string, number> = {
   'qwen3:30b': 3.3, 'qwen3:235b': 22, 'qwen3-coder:30b': 3.3, 'qwen3-coder:480b': 35,
@@ -228,8 +236,34 @@ const MIXTURE_ACTIVE_B: Record<string, number> = {
   'deepseek-v2:16b': 2.4, 'deepseek-v2:236b': 21, 'deepseek-coder-v2:16b': 2.4, 'deepseek-coder-v2:236b': 21,
   'deepseek-v2.5:236b': 21, 'deepseek-v3:671b': 37, 'deepseek-v3.1:671b': 37, 'deepseek-r1:671b': 37,
   'granite3-moe:1b': 0.4, 'granite3-moe:3b': 0.8, 'granite3.1-moe:1b': 0.4, 'granite3.1-moe:3b': 0.8,
-  'dbrx:132b': 36, 'glm-4.7-flash': 3,
+  'dbrx:132b': 36, 'glm-4.7-flash': 3, 'gemma4:26b': 4,
 };
+
+/**
+ * The share of its download a model reads for each word, where a measurement
+ * says it is not all of it. Gemma 4 runs faster than its size: on an RTX 4070,
+ * timed back to back with llama3.1:8b (86 tok/s, which its size alone
+ * explains), gemma4:12b wrote 91 tok/s where its size gives 53, and gemma4:e4b
+ * 174 where its size gives 64. Its downloads carry more than the weights read
+ * for each word (the registry lists a projector and a draft model beside
+ * them), and an "e" size is named for the parameters it runs, not the ones it
+ * holds: e4b is 7.5B. An Apple M4 agreed: 32 tok/s for its 8.8 GB build of
+ * e4b, where this share gives 28 and the whole download 10. e2b is given
+ * e4b's share, and the sizes not measured the 12b's.
+ *
+ * Keyed like MIXTURE_ACTIVE_B. It changes the speed only: the model still has
+ * to fit whole. Without it, one tested Gemma 4 also made every other estimate
+ * "going by models tested here" up to three times too fast (rigBandwidth).
+ */
+const MEASURED_READ_SHARE: Record<string, number> = {
+  'gemma4:e2b': 0.37, 'gemma4:e4b': 0.37, 'gemma4:latest': 0.37, gemma4: 0.58,
+};
+
+/** A table's entry for family:tag, else for the tag's size ("26b" of "26b-mlx": the same model, built another way), else for the family. */
+function keyedBySize(table: Record<string, number>, lowerName: string): number | undefined {
+  const [family, tag = ''] = lowerName.split(':');
+  return table[`${family}:${tag}`] ?? table[`${family}:${tag.split('-')[0]}`] ?? table[family];
+}
 
 /**
  * "with 3B active parameters", "activating just 12B parameters", "118B-A8B":
@@ -256,8 +290,7 @@ export function activeShare(name: string, totalB: number | null, description?: s
   const lower = name.toLowerCase();
   const active = lower.match(/(?<![\d.a-z])a(\d+(?:\.\d+)?)b\b/);
   if (active && totalB && totalB > 0) return clamp(Number.parseFloat(active[1]) / totalB, 0.02, 1);
-  const [family, tag = ''] = lower.split(':');
-  const known = MIXTURE_ACTIVE_B[`${family}:${tag}`] ?? MIXTURE_ACTIVE_B[family];
+  const known = keyedBySize(MIXTURE_ACTIVE_B, lower);
   if (known && totalB && totalB > 0) return clamp(known / totalB, 0.02, 1);
   const experts = lower.match(/(?<![\d.])(\d+)x\d+(?:\.\d+)?b\b/);
   if (experts) return clamp(2 / Number.parseInt(experts[1], 10) + 0.03, 0.02, 1);
@@ -273,7 +306,8 @@ function shareOf(row: SizedRow): number {
 
 function readGbPerToken(row: SizedRow, sizeGb: number): number {
   const share = shareOf(row);
-  return sizeGb * (share < 1 ? Math.min(1, share * EXPERT_ROUTING_COST) : 1);
+  if (share < 1) return sizeGb * Math.min(1, share * EXPERT_ROUTING_COST);
+  return sizeGb * (keyedBySize(MEASURED_READ_SHARE, fullName(row).toLowerCase()) ?? 1);
 }
 
 /** Graphics memory a model can be held in: none when it is only a carve-out (USABLE_VRAM_MIN_GB). */
@@ -382,11 +416,19 @@ export function unifiedMemoryFit(row: GradeRow, hardware: GradeHardware): Hardwa
   if (row.sizeGb <= hardware.vramGb
     && getHardwareFit({ ...row, fitOverride: undefined }, hardware.vramGb).tone === 'out-of-league') return null;
   const memory = `${formatGb(hardware.vramGb)} of shared memory`;
-  return row.sizeGb > hardware.vramGb
-    ? {
+  if (row.sizeGb > hardware.vramGb) {
+    return {
       tone: 'out-of-league',
       label: `Too big · ${formatGb(row.sizeGb)}`,
       detail: `Bigger than all of your ${memory}`,
+      recommend: false,
+    };
+  }
+  return row.sizeGb > hardware.vramGb * UNIFIED_CROWDED_SHARE
+    ? {
+      tone: 'tight',
+      label: `Barely fits · ${formatGb(row.sizeGb)}`,
+      detail: `Takes nearly all of your ${memory}, leaving the system too little to run beside it`,
       recommend: false,
     }
     : {
@@ -501,8 +543,11 @@ function fitReason(row: GradeRow, fit: HardwareFit, hardware: GradeHardware, spa
     // apps need their share of it too.
     const size = row.sizeGb ?? 0;
     if (size > hardware.vramGb) return `Bigger than your ${memory}, so it will be slow`;
+    // The same words as unifiedMemoryFit's, here and below, for a row graded without it.
+    if (size > hardware.vramGb * UNIFIED_CROWDED_SHARE) {
+      return `Takes nearly all of your ${memory}, leaving the system too little to run beside it`;
+    }
     if (size > hardware.vramGb * UNIFIED_USABLE_SHARE) {
-      // The same words as unifiedMemoryFit's, for a row graded without it.
       return `Needs more of your ${memory} than a model can have beside the system, which slows it down`;
     }
     return fit.tone === 'tight' || (spareGb ?? 0) < 1
@@ -525,7 +570,8 @@ const capitalize = (text: string) => text.charAt(0).toUpperCase() + text.slice(1
  * The fit decides first, through getHardwareFit, so the grade can never
  * disagree with the fit pill beside it: "Too big" is an F, an unknown size is
  * "?", and a tight fit is a C at best however good the model is. So is a
- * model past the share of a Mac's memory it can have. The rest is answer
+ * model past the share of a Mac's memory it can have, and one that takes
+ * nearly all of that memory is a D at best. The rest is answer
  * quality 50%, speed 25%, fit 15% and room to chat 10%. A model that cannot
  * hold a chat (an embedding, image or video model) is graded on its fit
  * alone, since words a second mean nothing for it.
@@ -552,11 +598,12 @@ export function gradeModel(row: GradeRow, hardware: GradeHardware, evidence: Gra
     return { ...base, letter: 'F', points: 0, reasons: [firstReason], summary: firstReason };
   }
   const squeezed = fit.tone === 'tight' || pastSharedLimit;
+  const crowded = Boolean(hardware.unifiedMemory && row.sizeGb && row.sizeGb > vramGb * UNIFIED_CROWDED_SHARE);
   const fitPts = squeezed ? 35 : fit.tone === 'sweet-spot' ? 100 : 75;
   const textModel = canGenerateText({ ...row, displayName: fullName(row) }) && !isEmbeddingModel(fullName(row));
   if (!textModel) {
-    // The fit's own tier, as a letter: A, B, or C for a tight one.
-    const points = squeezed ? 60 : fit.tone === 'sweet-spot' ? 100 : 78;
+    // The fit's own tier, as a letter: A, B, C for a tight one, D for a crowded Mac.
+    const points = crowded ? 45 : squeezed ? 60 : fit.tone === 'sweet-spot' ? 100 : 78;
     return { ...base, letter: letterFor(points), points, reasons: [firstReason], summary: firstReason };
   }
 
@@ -568,7 +615,7 @@ export function gradeModel(row: GradeRow, hardware: GradeHardware, evidence: Gra
   // here measures, so room to chat neither helps nor hurts.
   const context = vramGb <= 0 ? 50 : contextPoints(spareGb ?? 0, paramsBillions(row) ?? 1);
   const raw = quality.points * 0.5 + speedPoints(tokensPerSecond ?? 0) * 0.25 + fitPts * 0.15 + context * 0.1;
-  const points = Math.round(squeezed ? Math.min(raw, 69) : raw);
+  const points = Math.round(crowded ? Math.min(raw, 54) : squeezed ? Math.min(raw, 69) : raw);
 
   const reasons = [firstReason];
   if (tokensPerSecond) {
