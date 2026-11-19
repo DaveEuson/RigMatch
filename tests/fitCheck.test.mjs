@@ -303,7 +303,13 @@ test('the command runs from source: --json, --provider, --vram 0 and its errors'
   assert.equal(none.hardware.gpu, 'No graphics card');
   const letters = (result) => Object.fromEntries(result.models.map((model) => [model.model, model.grade]));
   const [noneLetters, carveLetters] = [letters(none), letters(carve)];
-  for (const name of ['llama3.2:3b', 'qwen3:4b', 'qwen3:14b', 'gemma3:27b']) assert.equal(noneLetters[name], carveLetters[name], name);
+  if (carve.hardware.unifiedMemory) {
+    // On shared memory (the Apple-chip CI runner) --vram keeps the chip, so
+    // 1.5 GB is that chip with 1.5 GB of shared memory, not a carve-out card.
+    assert.notEqual(carve.hardware.gpu, 'A 1.5 GB graphics card');
+  } else {
+    for (const name of ['llama3.2:3b', 'qwen3:4b', 'qwen3:14b', 'gemma3:27b']) assert.equal(noneLetters[name], carveLetters[name], name);
+  }
   assert.equal(noneLetters['qwen3:14b'], 'F', 'too big for the processor: F, not "?"');
   assert.match((await runCli(['--vram', '0'])).stdout.split('\n')[1], /^No graphics card, [\d.]+ GB system memory$/);
 

@@ -3,6 +3,23 @@ import type { ReleaseNoteEntry } from '../components/UpdateCenter';
 
 export const releaseNotes: ReleaseNoteEntry[] = [
   {
+    version: '0.11.3',
+    label: 'Right on a Mac',
+    date: 'Beta build',
+    notes: [
+      'The Models list shows every size of a model family again. gemma4, qwen3.5, gpt-oss and about 35 other families had been left with one "latest" row once newer models pushed them down Ollama\'s library.',
+      'Sizes now match what your computer downloads. Some models come in two builds, and a Mac gets a different one: gemma4:e4b is 6.6 GB on a PC and 9.5 GB on a Mac. On Windows and Linux, gemma4 12b, 26b and 31b and four Nemotron models were listed up to 7 GB too small.',
+      'Gemma 4 speed estimates were two to three times too low, and gemma4:26b\'s six times: it is a mixture of experts, and is now graded as one.',
+      'On a Mac, a model that takes more than 85% of your memory is "Barely fits", a D, and is no longer recommended. It was a C.',
+      'On a 16 GB or 24 GB Mac, the Speed score offers the three tiers your memory can run, instead of asking you to download the 17.7 GB Extreme model. A brief jump in the desktop\'s own graphics use no longer marks a run "Not a clean score".',
+      'The context check calls a model slow only below half its short-context speed, and says when it writes a little slower, so the verdict no longer flips from one run to the next. On a Mac it no longer says Ollama cut a prompt that went in whole.',
+      'On a Mac, RigMatch says GPU instead of graphics card, and no longer calls a model slow next to a fast speed estimate.',
+      'Your OpenRouter key is now stored encrypted by your operating system. A key you already entered moves over the first time this version opens.',
+      'rigmatch-fit: Ctrl+C during --measure or --endurance through npx unloads the model again, --vram grades a Mac as a Mac, errors under --json come out as JSON, and an unknown option or a malformed OLLAMA_HOST gets a plain sentence.',
+      'RigMatch\'s list of what each Ollama model can do is refreshed for 273 families, now with the size each kind of computer downloads. inkling-2-small, a cloud model, is new.',
+    ],
+  },
+  {
     version: '0.11.2',
     label: 'Nothing Lost',
     date: 'Beta build',
