@@ -198,6 +198,21 @@ async function listProcessNames(run, platform = process.platform) {
 const WATCH_SETTLE_MS = 1100;
 
 /**
+ * The readings that last look takes, and the gap between them, by where they
+ * come from. nvidia-smi's figure is already an average over its sample period,
+ * so two are a second opinion. ioreg's is the instant it is read. On an Apple
+ * M4 (2026-11-19) it read 97 as a request ended, 12 half a second later and
+ * the idle desktop's 21 to 25 from then on, with jumps of its own to 31, 32
+ * and 44 that were gone by the next reading half a second after. Two readings
+ * 150 ms apart are one such moment: a speed test was marked "53% busy between
+ * the runs" that ran no slower than the next two. Five across a second are
+ * judged by their median, which a jump that short cannot reach and a program
+ * holding the card still does.
+ */
+const WATCH_SAMPLING = { samples: 2, gapMs: 150 };
+const IOREG_WATCH_SAMPLING = { samples: 5, gapMs: 250 };
+
+/**
  * Ollama's own model runner is named llama-server.exe on current versions
  * (seen on 0.40.5: it starts when a model loads and ends when it unloads), which
  * is also the name the allowlist gives "a llama.cpp server". A runner that
@@ -240,14 +255,16 @@ const pause = (ms, signal) => new Promise((resolve) => {
  *
  * `context` is what sampleGpuLoad takes, or a function from the machine reading
  * the runner has ({ gpu, isUnifiedMemory, ... }) to it; it may also say
- * `unifiedMemory`, to leave the memory check out on a shared pool.
+ * `unifiedMemory`, to leave the memory check out on a shared pool. `samples`
+ * and `gapMs` replace the source's own (WATCH_SAMPLING), for tests.
  */
-function createGpuWatch(context, { settleMs = WATCH_SETTLE_MS, samples = 2, gapMs = 150 } = {}) {
+function createGpuWatch(context, { settleMs = WATCH_SETTLE_MS, samples, gapMs } = {}) {
   let ctx = null;
   let baseline = null;
   let baselineApps = [];
   let reference = null;
   let instant = null;
+  let sampling = WATCH_SAMPLING;
 
   const apps = async () => contention.matchKnownGpuApps(await listProcessNames(ctx.run, ctx.platform ?? process.platform));
   // The first reading after the model has loaded is what memory is compared with
@@ -265,6 +282,8 @@ function createGpuWatch(context, { settleMs = WATCH_SETTLE_MS, samples = 2, gapM
       baseline = load.reading;
       baselineApps = await apps();
       reference = null;
+      const own = load.source === 'ioreg' ? IOREG_WATCH_SAMPLING : WATCH_SAMPLING;
+      sampling = { samples: samples ?? own.samples, gapMs: gapMs ?? own.gapMs };
       // Only a source that answers in milliseconds may be read between requests.
       instant = load.source === 'nvidia-smi' ? () => readNvidiaOnce(ctx.run)
         : load.source === 'amdgpu-sysfs' ? async () => readAmdSysfs(ctx.sysfsRoot ?? '/')
@@ -288,7 +307,7 @@ function createGpuWatch(context, { settleMs = WATCH_SETTLE_MS, samples = 2, gapM
         }
         await pause(settleMs, signal);
         if (signal?.aborted) return null;
-        const [{ reading }, currentApps] = await Promise.all([sampleGpuLoad(ctx, { samples, gapMs }), apps()]);
+        const [{ reading }, currentApps] = await Promise.all([sampleGpuLoad(ctx, sampling), apps()]);
         const verdict = contention.judgeMidRun({
           baseline,
           reference,

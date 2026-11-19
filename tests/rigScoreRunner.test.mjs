@@ -746,6 +746,45 @@ test("the real watch: on a shared memory pool only the card's busy figure counts
   assert.equal(await watch.check({ signal: stopping.signal }), null, 'Stop ends the wait');
 });
 
+test('the real watch: on a Mac one jump of the desktop is not a program on the card, and a program that holds it still is', async () => {
+  // ioreg reads the instant, not an average. Apple M4, 2026-11-19: 97 as a
+  // request ended, 12 half a second later, then an idle desktop at 21 to 25
+  // with jumps of its own to 44. Judged from two readings, a speed test was
+  // marked "53% busy between the runs" that ran no slower than the next two.
+  const queue = [];
+  const asked = [];
+  const ioreg = (percent) => `"PerformanceStatistics" = {"Device Utilization %"=${percent},"In use system memory"=763723776}`;
+  const macRun = async (command) => {
+    asked.push(command);
+    if (command === 'ioreg') return { output: ioreg(queue.length ? queue.shift() : 24), error: null };
+    if (command === 'ps') return { output: ['WindowServer', 'ollama'].join('\n'), error: null };
+    return { output: '', error: 'not found' };
+  };
+  const watch = createGpuWatch({ run: macRun, platform: 'darwin', arch: 'arm64', gpuName: 'Apple M4', unifiedMemory: true }, { settleMs: 0, gapMs: 0 });
+  await watch.start({ machine });
+  assert.equal(await watch.check({ last: false }), null, 'ioreg is not read between requests');
+
+  const afterTheLast = async (...percents) => {
+    queue.push(...percents);
+    asked.length = 0;
+    const verdict = await watch.check({ last: true });
+    return { verdict, read: asked.filter((command) => command === 'ioreg').length };
+  };
+  const jump = await afterTheLast(62, 58, 23, 24, 22);
+  assert.equal(jump.read, 5, 'five readings, where a card with an averaged figure gets two');
+  assert.deepEqual(jump.verdict, { disturbed: false, reasons: [] }, 'the first two readings alone were 60% busy');
+  const held = await afterTheLast(78, 85, 80, 90, 82);
+  assert.deepEqual(held.verdict.reasons, ['the graphics card was 82% busy between the runs']);
+
+  // A figure that is already an average is still read twice.
+  const { state, run: cardRun } = fakeCard();
+  const pc = createGpuWatch(card(cardRun), { settleMs: 0, gapMs: 0 });
+  await pc.start({ machine });
+  state.asked.length = 0;
+  await pc.check({ last: true });
+  assert.equal(state.asked.filter((command) => command === 'nvidia-smi').length, 2);
+});
+
 test('the main process and the command line give the runner a watch, and the runner takes one', async () => {
   const { readFileSync } = await import('node:fs');
   const read = (file) => readFileSync(new URL(file, import.meta.url), 'utf-8').replace(/\r\n/g, '\n');
