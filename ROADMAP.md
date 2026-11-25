@@ -45,6 +45,23 @@ Costs: a server, moderation of junk submissions, and a privacy policy worth
 standing behind. 1.0+, and deserves its own design pass rather than being
 bolted onto a release.
 
+### A game it plays, not just makes
+
+Dave's idea, 2026-11-25. The Lab's Tetris and Snake rounds test whether a model can write a game. Nothing tests whether it can play one: a long run of decisions where each answer depends on the last board. The checks in `src/lib/labChallenges.ts` read the code; nothing there runs the game.
+
+**Not real Doom.** [VideoGameBench](https://arxiv.org/abs/2505.18134) (Princeton, 2025) found that frontier vision models make no progress on Doom II even when the game pauses between moves. A local model on a 12 GB card would do worse, so every model would tie at zero and nothing would rank. Doom stays a possible one-off clip for a post (ViZDoom with Freedoom's free assets), not a benchmark.
+
+**The version worth building:** a text game RigMatch owns, Snake first and then a small dungeon.
+
+- Each turn the model gets the board as text and replies with one move. Five games per model, from fixed seeds, so every model sees the same boards.
+- Score is how far it gets. Illegal moves per game and seconds per move come with it, and seconds per move is the speed number again.
+- It works on any model, with no vision and no downloads.
+- It fits Endurance: the boards fill the context as the game goes on, so a model that loses its place shows up late in a game.
+
+**First step:** a `rigmatch-fit --play snake` prototype in the CLI, which needs no app changes (about 2 hours). Then decide whether it becomes a round in the show. Not for 0.12.0 unless Dave says so.
+
+**Related, separate:** a bot that plays the Tetris or Snake a model wrote would check that the game works, which the code checks cannot.
+
 ### Provider parity, then a third provider
 
 `LocalModelProvider` is already `'ollama' | 'lm-studio'`, `getModelRuntime`
